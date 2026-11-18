@@ -1,24 +1,25 @@
 #include "command_handler.h"
 
-CommandHandler::CommandHandler(CLI cli) 
-    : cli(cli){
+CommandHandler::CommandHandler() = default;
+
+void CommandHandler::registerCommand(const std::string& name, std::unique_ptr<Command> command) {
+    commands.insert_or_assign(name, std::move(command));
 }
 
-int CommandHandler::execute() {
-  if (!cli.isValid()) {
-    return 1;
-  }
+int CommandHandler::execute(const CLI& cli) {
+    if (!cli.isValid()) {
+        return 1;
+    }
 
-  return dispatchCommand();
+    return dispatchCommand(cli);
 }
 
+int CommandHandler::dispatchCommand(const CLI& cli) {
+    const auto iterator = commands.find(cli.getCommand());
 
-int CommandHandler::dispatchCommand() {
-  const std::string command = cli.getCommand();
+    if (iterator == commands.end()) {
+        return 1;
+    }
 
-  if (command.empty()) {
-    return 1;
-  }
-
-  return 0;
+    return iterator->second->execute(cli);
 }

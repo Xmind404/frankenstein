@@ -38,12 +38,16 @@ bool CLI::parse(int argc, char* argv[]) {
     return is_valid;
 }
 
-std::string CLI::getCommand() const {
+const std::string& CLI::getCommand() const {
     return command;
 }
 
 const std::vector<std::string>& CLI::getArguments() const {
     return arguments;
+}
+
+const std::vector<std::string>& CLI::getFlags() const {
+    return flags;
 }
 
 bool CLI::hasFlag(const std::string& flag) const {

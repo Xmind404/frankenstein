@@ -18,8 +18,9 @@ class CLI {
   public:
     bool parse(int argc, char* argv[]);
 
-    std::string getCommand() const;
+    const std::string& getCommand() const;
     const std::vector<std::string>& getArguments() const;
+    const std::vector<std::string>& getFlags() const;
 
     bool hasFlag(const std::string& flag) const;
     bool isValid() const;

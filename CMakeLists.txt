@@ -7,8 +7,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(frankenstein 
   src/main.cpp
-  src/core/application.cpp
   src/datatypes/version.cpp
+  src/core/application.cpp
+  src/commands/new_command.cpp
+  src/cli/cli.cpp
+  src/cli/command_handler.cpp
+  src/cli/console.cpp
+  src/commands/project_validator.cpp
 )
 
 target_include_directories(frankenstein PRIVATE src)

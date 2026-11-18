@@ -1,7 +1,10 @@
 #include "application.h"
 
+#include <memory>
+
 #include "../cli/cli.h"
 #include "../cli/command_handler.h"
+#include "../commands/new_command.h"
 
 Application::Application(datatypes::Version version)
     : version(version) {
@@ -18,7 +21,9 @@ int Application::run(int argc, char* argv[]) {
         return 1;
     }
 
-    CommandHandler command_handler(cli);
+    CommandHandler commandHandler;
 
-    return command_handler.execute();
+    commandHandler.registerCommand("new", std::make_unique<NewCommand>());
+
+    return commandHandler.execute(cli);
 }

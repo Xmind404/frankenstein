@@ -1,15 +1,22 @@
 #pragma once
 
+#include <memory>
+#include <string>
+#include <unordered_map>
+
 #include "cli.h"
+#include "../commands/command.h"
 
 class CommandHandler {
   private:
-    CLI cli;
+    std::unordered_map<std::string, std::unique_ptr<Command>> commands;
 
-    int dispatchCommand();
+    int dispatchCommand(const CLI& cli);
 
   public:
-    explicit CommandHandler(CLI cli);
+    CommandHandler();
 
-    int execute();
+    void registerCommand(const std::string& name, std::unique_ptr<Command> command);
+
+    int execute(const CLI& cli);
 };
