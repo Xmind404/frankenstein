@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.24)
-project(frankenstein VERSION 1.0.4 LANGUAGES CXX)
+project(frankenstein VERSION 1.0.5 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Release archives contain the executable alone, so bundled dependencies must
+# be static instead of requiring separate shared-library files at runtime.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build bundled dependencies as static libraries" FORCE)
 if(MSVC)
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()

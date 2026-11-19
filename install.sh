@@ -5,6 +5,7 @@ repo='Xmind404/frankenstein'
 base="https://github.com/$repo/releases/latest/download"
 install_dir="${FRANKENSTEIN_INSTALL_DIR:-$HOME/.local/bin}"
 binary="$install_dir/frankenstein"
+temporary_directory=''
 shell_name="${SHELL##*/}"
 
 logo() {
@@ -123,7 +124,7 @@ main() {
     exit 0
   fi
 
-  local os arch asset tmp
+  local os arch asset
   os=$(uname -s); arch=$(uname -m)
   case "$os:$arch" in
     Linux:x86_64|Linux:amd64) asset=frankenstein-linux-x86_64.tar.gz ;;
@@ -133,20 +134,20 @@ main() {
     *) printf 'Unsupported platform: %s %s\n' "$os" "$arch" >&2; exit 1 ;;
   esac
   for tool in curl tar; do command -v "$tool" >/dev/null || { printf 'Required tool not found: %s\n' "$tool" >&2; exit 1; }; done
-  tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
-  if ! curl --proto '=https' --tlsv1.2 -fsSL "$base/$asset" -o "$tmp/$asset"; then
+  temporary_directory=$(mktemp -d)
+  trap 'if [[ -n "$temporary_directory" ]]; then rm -rf "$temporary_directory"; fi' EXIT
+  if ! curl --proto '=https' --tlsv1.2 -fsSL "$base/$asset" -o "$temporary_directory/$asset"; then
     printf 'No downloadable Release asset found. Publish a GitHub Release first: https://github.com/%s/releases\n' "$repo" >&2; exit 1
   fi
-  curl --proto '=https' --tlsv1.2 -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS" || { echo 'Release is missing SHA256SUMS; refusing to install an unverified binary.' >&2; exit 1; }
-  grep -F "  $asset" "$tmp/SHA256SUMS" > "$tmp/asset.sha256" || { echo "No checksum entry found for $asset" >&2; exit 1; }
-  if command -v sha256sum >/dev/null 2>&1; then (cd "$tmp" && sha256sum --check asset.sha256)
-  elif command -v shasum >/dev/null 2>&1; then (cd "$tmp" && shasum -a 256 --check asset.sha256)
+  curl --proto '=https' --tlsv1.2 -fsSL "$base/SHA256SUMS" -o "$temporary_directory/SHA256SUMS" || { echo 'Release is missing SHA256SUMS; refusing to install an unverified binary.' >&2; exit 1; }
+  grep -F "  $asset" "$temporary_directory/SHA256SUMS" > "$temporary_directory/asset.sha256" || { echo "No checksum entry found for $asset" >&2; exit 1; }
+  if command -v sha256sum >/dev/null 2>&1; then (cd "$temporary_directory" && sha256sum --check asset.sha256)
+  elif command -v shasum >/dev/null 2>&1; then (cd "$temporary_directory" && shasum -a 256 --check asset.sha256)
   else echo 'SHA-256 verification requires sha256sum or shasum.' >&2; exit 1; fi
-  tar -xzf "$tmp/$asset" -C "$tmp"
-  [[ -f "$tmp/bin/frankenstein" ]] || { echo 'Release archive does not contain bin/frankenstein.' >&2; exit 1; }
+  tar -xzf "$temporary_directory/$asset" -C "$temporary_directory"
+  [[ -f "$temporary_directory/bin/frankenstein" ]] || { echo 'Release archive does not contain bin/frankenstein.' >&2; exit 1; }
   mkdir -p "$install_dir"
-  install -m 755 "$tmp/bin/frankenstein" "$binary"
+  install -m 755 "$temporary_directory/bin/frankenstein" "$binary"
   say "Installed Frankenstein in $binary"
   if ask_tf 'Add the install directory to PATH automatically?'; then
     add_path "$profile"
