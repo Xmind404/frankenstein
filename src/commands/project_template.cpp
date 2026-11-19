@@ -108,7 +108,7 @@ bool ProjectTemplate::create(
     {
       ".clangd",
       "CompileFlags:\n"
-      "  CompilationDatabase: build\n"
+      "  CompilationDatabase: .\n"
     },
     {
       ".clang-format",

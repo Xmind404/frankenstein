@@ -18,6 +18,20 @@ std::string quote(const std::string& value) {
 #endif
 }
 int cmake(const std::string& arguments) { return std::system(("cmake " + arguments).c_str()); }
+
+bool syncCompilationDatabase(const std::filesystem::path& build_dir) {
+  namespace fs = std::filesystem;
+  const fs::path source = build_dir / "compile_commands.json";
+  const fs::path destination = "compile_commands.json";
+  std::error_code ec;
+
+  if (!fs::exists(source, ec) || ec) {
+    return false;
+  }
+
+  fs::copy_file(source, destination, fs::copy_options::overwrite_existing, ec);
+  return !ec;
+}
 }
 
 int BuildCommand::execute(const CLI& cli) {
@@ -43,9 +57,18 @@ int BuildCommand::execute(const CLI& cli) {
   if (!standard_sync_message.empty()) {
     Console::print(standard_sync_message);
   }
-  if (action == Action::Check) return cmake("-S . -B " + quote(build_dir.string()));
+  if (action == Action::Check) {
+    const int result = cmake("-S . -B " + quote(build_dir.string()));
+    if (result == 0 && !syncCompilationDatabase(build_dir)) {
+      Console::warning("Could not update compile_commands.json for clangd.");
+    }
+    return result;
+  }
   int result = cmake("-S . -B " + quote(build_dir.string()));
   if (result != 0) { Console::error("CMake configuration failed."); return result; }
+  if (!syncCompilationDatabase(build_dir)) {
+    Console::warning("Could not update compile_commands.json for clangd.");
+  }
   std::string build_args = "--build " + quote(build_dir.string()) + " --config " + config;
   if (action == Action::Test) build_args = "--build " + quote(build_dir.string()) + " --target test --config " + config;
   if (cli.hasFlag("--target") && !cli.getFlagValue("--target").empty()) build_args += " --target " + quote(cli.getFlagValue("--target"));
