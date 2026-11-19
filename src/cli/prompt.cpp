@@ -74,6 +74,7 @@ namespace prompt {
         return value.empty() ? default_value : value;
     }
 
+
     std::size_t select(
         const std::string& label,
         const std::vector<std::string>& options,
@@ -88,9 +89,15 @@ namespace prompt {
         }
 
         std::size_t selected_index = default_index;
+        bool first_render = true;
 
         while (true) {
-            std::cout << "\033[2J\033[H";
+            if (!first_render) {
+                std::cout << "\033[" << options.size() + 3 << "A";
+                std::cout << "\033[J";
+            }
+
+            first_render = false;
 
             ascii::draw("◆", label, ascii::Color::Green, ascii::Color::White);
             std::cout << "│\n";
@@ -127,5 +134,6 @@ namespace prompt {
             }
         }
     }
+
 
 }

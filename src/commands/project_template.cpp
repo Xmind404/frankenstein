@@ -96,7 +96,7 @@ bool ProjectTemplate::create(
 
     const std::string source_file = is_c ? "src/main.c" : "src/main.cpp";
 
-    const std::array<File, 7> files = {{
+    const std::array<File, 8> files = {{
         {
             "CMakeLists.txt",
             createCMakeLists(
@@ -136,6 +136,11 @@ bool ProjectTemplate::create(
             "A project created with Frankenstein.\n"
         },
         {
+            "Frankenstein.toml",
+            std::string("[project]\nname = \"") + project_path.filename().string() +
+            "\"\nversion = \"0.1.0\"\nstandard = \"" + standard + "\"\n\n[dependencies]\n"
+        },
+        {
             source_file,
             createMainSource(configuration.getLanguage())
         },
@@ -150,11 +155,11 @@ bool ProjectTemplate::create(
 
         std::error_code error;
 
-        if (std::filesystem::exists(file_path, error) || error) {
-            return false;
-        }
+        if (error) return false;
+        if (std::filesystem::exists(file_path, error)) continue;
+        if (error) return false;
 
-        std::ofstream output(file_path, std::ios::binary);
+        std::ofstream output(file_path, std::ios::binary | std::ios::out);
 
         if (!output.is_open()) {
             return false;

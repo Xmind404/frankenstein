@@ -1,4 +1,5 @@
 #include "command_handler.h"
+#include "console.h"
 
 CommandHandler::CommandHandler() = default;
 
@@ -18,7 +19,8 @@ int CommandHandler::dispatchCommand(const CLI& cli) {
     const auto iterator = commands.find(cli.getCommand());
 
     if (iterator == commands.end()) {
-        return 1;
+        Console::error("Unknown command: " + cli.getCommand() + ". Run 'frankenstein --help' for a list of commands.");
+        return 127;
     }
 
     return iterator->second->execute(cli);

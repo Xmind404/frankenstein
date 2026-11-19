@@ -1,6 +1,6 @@
-
 #pragma once
 
+#include <optional>
 #include <string>
 
 namespace configuration {
@@ -41,6 +41,10 @@ namespace configuration {
       public:
         explicit ProjectConfiguration(CStandard standard);
         explicit ProjectConfiguration(CppStandard standard);
+
+        static std::optional<ProjectConfiguration> fromTemplate(
+            const std::string& template_name
+        );
 
         Language getLanguage() const;
 

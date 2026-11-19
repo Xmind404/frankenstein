@@ -14,7 +14,14 @@ namespace ascii {
         Magenta,
         Cyan,
         White,
-        Gray
+        Gray,
+        DarkGreen,
+        BrightGreen,
+        DarkBlue,
+        BrightBlue,
+        Purple,
+        Orange,
+        Pink
     };
 
     void draw(const std::string& content);
@@ -28,5 +35,7 @@ namespace ascii {
     );
 
     void draw(const std::vector<std::string>& lines, Color color = Color::Default);
+    void drawLogo();
+    void setColorEnabled(bool enabled);
 
 }
