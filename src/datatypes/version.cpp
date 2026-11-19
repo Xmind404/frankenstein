@@ -6,11 +6,11 @@
 namespace datatypes {
 
 std::string Version::to_string() const {
-    return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
+  return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
 }
 
 std::ostream& operator<<(std::ostream& os, const Version& v) {
-    return os << v.to_string();
+  return os << v.to_string();
 }
 
 }

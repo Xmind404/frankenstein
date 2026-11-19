@@ -6,8 +6,8 @@
 
 class ProjectTemplate {
   public:
-    bool create(
-        const std::filesystem::path& project_path,
-        const configuration::ProjectConfiguration& configuration
-    );
+  bool create(
+    const std::filesystem::path& project_path,
+    const configuration::ProjectConfiguration& configuration
+  );
 };

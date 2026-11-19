@@ -4,7 +4,7 @@
 
 class Command {
   public:
-    virtual ~Command() = default;
+  virtual ~Command() = default;
 
-    virtual int execute(const CLI& cli) = 0;
+  virtual int execute(const CLI& cli) = 0;
 };

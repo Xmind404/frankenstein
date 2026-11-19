@@ -24,12 +24,12 @@ logo() {
 }
 
 say() { printf '\033[32m◆\033[0m %s\n' "$*"; }
-ask_tf() {
+ask_yn() {
   local answer
   while true; do
-    printf '\033[32m◆\033[0m %s [T/F] ' "$1" > /dev/tty
+    printf '\033[32m◆\033[0m %s [Y/N] ' "$1" > /dev/tty
     IFS= read -r answer < /dev/tty || return 1
-    case "$answer" in T|t) return 0 ;; F|f) return 1 ;; *) printf '│ Please enter T or F.\n' > /dev/tty ;; esac
+    case "$answer" in Y|y) return 0 ;; N|n) return 1 ;; *) printf '│ Please enter Y or N.\n' > /dev/tty ;; esac
   done
 }
 
@@ -114,7 +114,7 @@ main() {
     case "$REPLY" in 0) action=install ;; *) exit 0 ;; esac
   fi
   if [[ "$action" != install && "$action" != reinstall && "$action" != uninstall ]]; then printf 'Invalid FRANKENSTEIN_ACTION: %s\n' "$action" >&2; exit 2; fi
-  if ! ask_tf "Continue with $action?"; then say 'Cancelled.'; exit 0; fi
+  if ! ask_yn "Continue with $action?"; then say 'Cancelled.'; exit 0; fi
   profile=$(profile_path)
   if [[ "$action" == uninstall ]]; then
     rm -f "$binary"
@@ -149,7 +149,7 @@ main() {
   mkdir -p "$install_dir"
   install -m 755 "$temporary_directory/bin/frankenstein" "$binary"
   say "Installed Frankenstein in $binary"
-  if ask_tf 'Add the install directory to PATH automatically?'; then
+  if ask_yn 'Add the install directory to PATH automatically?'; then
     add_path "$profile"
     say "Updated PATH startup file: $profile"
     if [[ "$shell_name" == fish ]]; then say "Apply now with: source $(printf %q "$profile")"; else say "Apply now with: source $(printf %q "$profile")"; fi

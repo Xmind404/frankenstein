@@ -4,5 +4,5 @@
 
 class ProjectValidator {
   public:
-    static bool isValidName(const std::string& name);
+  static bool isValidName(const std::string& name);
 };

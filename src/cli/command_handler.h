@@ -9,14 +9,14 @@
 
 class CommandHandler {
   private:
-    std::unordered_map<std::string, std::unique_ptr<Command>> commands;
+  std::unordered_map<std::string, std::unique_ptr<Command>> commands;
 
-    int dispatchCommand(const CLI& cli);
+  int dispatchCommand(const CLI& cli);
 
   public:
-    CommandHandler();
+  CommandHandler();
 
-    void registerCommand(const std::string& name, std::unique_ptr<Command> command);
+  void registerCommand(const std::string& name, std::unique_ptr<Command> command);
 
-    int execute(const CLI& cli);
+  int execute(const CLI& cli);
 };

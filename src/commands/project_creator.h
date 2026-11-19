@@ -4,5 +4,5 @@
 
 class ProjectCreator {
   public:
-    bool create(const std::filesystem::path& project_path);
+  bool create(const std::filesystem::path& project_path);
 };

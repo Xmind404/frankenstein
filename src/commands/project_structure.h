@@ -3,6 +3,6 @@
 #include <filesystem>
 
 class ProjectStructure {
-    public:
-        bool create(const std::filesystem::path& project_path);
+  public:
+    bool create(const std::filesystem::path& project_path);
 };

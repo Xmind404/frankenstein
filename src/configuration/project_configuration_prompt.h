@@ -4,9 +4,9 @@
 
 namespace configuration {
 
-    class ProjectConfigurationPrompt {
-      public:
-        static ProjectConfiguration select();
-    };
+  class ProjectConfigurationPrompt {
+    public:
+    static ProjectConfiguration select();
+  };
 
 }

@@ -6,14 +6,14 @@
 
 class ProjectInitializer {
   public:
-    enum class Mode {
-        NewProject,
-        CurrentDirectory
-    };
+  enum class Mode {
+    NewProject,
+    CurrentDirectory
+  };
 
-    bool initialize(
-        const std::filesystem::path& project_path,
-        const configuration::ProjectConfiguration& configuration,
-        Mode mode
-    );
+  bool initialize(
+    const std::filesystem::path& project_path,
+    const configuration::ProjectConfiguration& configuration,
+    Mode mode
+  );
 };
