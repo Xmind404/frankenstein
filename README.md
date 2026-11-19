@@ -7,7 +7,7 @@ Frankenstein is a C/C++ project manager that uses CMake to configure and build p
 Linux and macOS:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/Xmind404/frankenstein/main/install.sh | sh
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/Xmind404/frankenstein/main/install.sh | bash
 ```
 
 Windows PowerShell:
@@ -16,7 +16,11 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/Xmind404/frankenstein/main/install.ps1 | iex
 ```
 
-The installer downloads the matching archive from the latest GitHub Release, verifies its SHA-256 checksum, and installs it for the current user. On Linux and macOS it adds `~/.local/bin` (or the selected install directory) to the detected shell's startup file; on Windows it updates the current user's `Path`. The default locations are `~/.local/bin` and `%LOCALAPPDATA%\Frankenstein\bin`. Set `FRANKENSTEIN_INSTALL_DIR` to choose a different location. Open a new terminal after installation so it reads the updated environment variable.
+The installer shows an interactive menu with arrow-key navigation. It offers **Install** when Frankenstein is not present, and **Reinstall**, **Uninstall**, or **Exit** when it is already installed. Confirm the selected action with `T` or cancel with `F`. Downloads are verified against the release's SHA-256 checksums before the existing binary is replaced.
+
+After installation, the installer asks whether to add its directory to PATH (`T`/`F`). Choosing `T` updates the current user's shell startup file on Linux/macOS or user PATH on Windows. Choosing `F` prints manual instructions. Linux/macOS defaults to `~/.local/bin`; Windows defaults to `%LOCALAPPDATA%\Frankenstein\bin`. Set `FRANKENSTEIN_INSTALL_DIR` before running the installer to choose another location. Open a new terminal after changing PATH.
+
+To preselect the action in a terminal, set `FRANKENSTEIN_ACTION=install`, `reinstall`, or `uninstall`. The installer still asks for T/F confirmation and asks whether to update PATH after installation.
 
 ## Build from source
 
@@ -44,6 +48,6 @@ frankenstein install
 
 ## Releases
 
-Pushing a version tag such as `v1.0.2` starts `.github/workflows/release.yml`. GitHub Actions builds Linux, macOS, and Windows archives, calculates `SHA256SUMS`, and publishes the assets as a GitHub Release. The install scripts download those release assets.
+Pushing a version tag such as `v1.0.3` starts `.github/workflows/release.yml`. GitHub Actions builds Linux, macOS, and Windows archives, calculates `SHA256SUMS`, and publishes the assets as a GitHub Release. The install scripts download those release assets. A tag by itself is not enough: the workflow must finish and publish the Release before the `releases/latest/download` installer URL can work.
 
-The Linux archive is built on Ubuntu 22.04 and targets compatible x86-64 and ARM64 Linux systems. Release builds require GitHub Actions network access to fetch the CPR curl dependency. The current release tag is `v1.0.2`.
+The Linux archive is built on Ubuntu 22.04 and targets compatible x86-64 and ARM64 Linux systems. Release builds require GitHub Actions network access to fetch the CPR curl dependency. The next release tag is `v1.0.3`.
