@@ -16,7 +16,7 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/Xmind404/frankenstein/main/install.ps1 | iex
 ```
 
-The installer downloads the matching archive from the latest GitHub Release, verifies its SHA-256 checksum, and installs it for the current user. On Linux and macOS the default location is `~/.local/bin`; on Windows it is `%LOCALAPPDATA%\Frankenstein\bin`. Set `FRANKENSTEIN_INSTALL_DIR` to choose a different location.
+The installer downloads the matching archive from the latest GitHub Release, verifies its SHA-256 checksum, and installs it for the current user. On Linux and macOS it adds `~/.local/bin` (or the selected install directory) to the detected shell's startup file; on Windows it updates the current user's `Path`. The default locations are `~/.local/bin` and `%LOCALAPPDATA%\Frankenstein\bin`. Set `FRANKENSTEIN_INSTALL_DIR` to choose a different location. Open a new terminal after installation so it reads the updated environment variable.
 
 ## Build from source
 
@@ -44,6 +44,6 @@ frankenstein install
 
 ## Releases
 
-Pushing a version tag such as `v1.0.1` starts `.github/workflows/release.yml`. GitHub Actions builds Linux, macOS, and Windows archives, calculates `SHA256SUMS`, and publishes the assets as a GitHub Release. The install scripts download those release assets.
+Pushing a version tag such as `v1.0.2` starts `.github/workflows/release.yml`. GitHub Actions builds Linux, macOS, and Windows archives, calculates `SHA256SUMS`, and publishes the assets as a GitHub Release. The install scripts download those release assets.
 
-The Linux archive is built on Ubuntu 22.04 and targets compatible x86-64 and ARM64 Linux systems. Release builds require GitHub Actions network access to fetch the CPR curl dependency.
+The Linux archive is built on Ubuntu 22.04 and targets compatible x86-64 and ARM64 Linux systems. Release builds require GitHub Actions network access to fetch the CPR curl dependency. The current release tag is `v1.0.2`.
