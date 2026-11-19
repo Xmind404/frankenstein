@@ -48,6 +48,6 @@ frankenstein install
 
 ## Releases
 
-Pushing a version tag such as `v1.0.3` starts `.github/workflows/release.yml`. GitHub Actions builds Linux, macOS, and Windows archives, calculates `SHA256SUMS`, and publishes the assets as a GitHub Release. The install scripts download those release assets. A tag by itself is not enough: the workflow must finish and publish the Release before the `releases/latest/download` installer URL can work.
+Pushing a version tag such as `v1.0.4` starts `.github/workflows/release.yml`. GitHub Actions builds Linux, macOS, and Windows archives, calculates `SHA256SUMS`, and publishes the assets as a GitHub Release. The install scripts download those release assets. A tag by itself is not enough: the workflow must finish and publish the Release before the `releases/latest/download` installer URL can work.
 
-The Linux archive is built on Ubuntu 22.04 and targets compatible x86-64 and ARM64 Linux systems. Release builds require GitHub Actions network access to fetch the CPR curl dependency. The next release tag is `v1.0.3`.
+The Linux archive is built on Ubuntu 22.04 and targets compatible x86-64 and ARM64 Linux systems. Release builds require GitHub Actions network access to fetch the CPR curl dependency. The next release tag is `v1.0.4`.

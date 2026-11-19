@@ -6,12 +6,35 @@
 #include <cstdio>
 #include <iostream>
 
+#ifdef _WIN32
+#include <conio.h>
+#else
 #include <termios.h>
 #include <unistd.h>
+#endif
 
 namespace {
 
     char getKey() {
+#ifdef _WIN32
+        const int key = _getch();
+
+        if (key == 0 || key == 0xE0) {
+            const int extended_key = _getch();
+
+            if (extended_key == 72) {
+                return 'A';
+            }
+
+            if (extended_key == 80) {
+                return 'B';
+            }
+
+            return '\0';
+        }
+
+        return static_cast<char>(key);
+#else
         termios old_terminal{};
 
         if (tcgetattr(STDIN_FILENO, &old_terminal) == -1) {
@@ -49,6 +72,7 @@ namespace {
         tcsetattr(STDIN_FILENO, TCSANOW, &old_terminal);
 
         return key;
+#endif
     }
 
 }
