@@ -11,9 +11,15 @@ add_executable(frankenstein
   src/core/application.cpp
   src/commands/new_command.cpp
   src/cli/cli.cpp
+  src/cli/ascii.cpp
   src/cli/command_handler.cpp
   src/cli/console.cpp
   src/commands/project_validator.cpp
+  src/commands/project_creator.cpp
+  src/commands/project_structure.cpp
+  src/commands/project_template.cpp
+  src/cli/prompt.cpp
+  src/configuration/project_configuration.cpp
 )
 
 target_include_directories(frankenstein PRIVATE src)
