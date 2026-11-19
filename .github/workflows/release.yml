@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            asset: frankenstein-linux-x86_64.tar.gz
+          - os: ubuntu-22.04-arm
+            asset: frankenstein-linux-aarch64.tar.gz
+          - os: macos-15-intel
+            asset: frankenstein-macos-x86_64.tar.gz
+          - os: macos-15
+            asset: frankenstein-macos-aarch64.tar.gz
+          - os: windows-2025
+            asset: frankenstein-windows-x86_64.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Package Unix archive
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          staging="$RUNNER_TEMP/frankenstein-package"
+          mkdir -p "$staging" dist
+          cmake --install build --config Release --prefix "$staging"
+          tar -C "$staging" -czf "dist/$ASSET" bin/frankenstein
+      - name: Package Windows archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          $staging = Join-Path $env:RUNNER_TEMP 'frankenstein-package'
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+          New-Item -ItemType Directory -Path 'dist' -Force | Out-Null
+          cmake --install build --config Release --prefix $staging
+          Compress-Archive -Path (Join-Path $staging 'bin\frankenstein.exe') -DestinationPath (Join-Path 'dist' $env:ASSET) -Force
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Create checksums
+        run: cd dist && sha256sum frankenstein-* > SHA256SUMS
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes
