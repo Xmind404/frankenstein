@@ -1,5 +1,6 @@
 #include "dependency_command.h"
 #include "../cli/console.h"
+#include "../cli/prompt.h"
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -12,12 +13,20 @@
 #include <cstdio>
 #include <sstream>
 #include <algorithm>
+#include <set>
 
 #ifdef FRANKENSTEIN_HAS_CPR
 #include <cpr/cpr.h>
 #endif
 
 namespace {
+struct Dependency {
+  std::string name;
+  std::string repository;
+  std::string branch;
+  std::string target;
+};
+
 std::string shellQuote(const std::string& value) {
 #ifdef _WIN32
   std::string out = "\"";
@@ -29,11 +38,13 @@ std::string shellQuote(const std::string& value) {
   return out + "'";
 #endif
 }
+
 bool validPart(const std::string& s) {
   if (s.empty() || s == "." || s == "..") return false;
   for (unsigned char c : s) if (!(std::isalnum(c) || c == '-' || c == '_' || c == '.')) return false;
   return true;
 }
+
 bool validBranch(const std::string& branch) {
   if (branch.empty()) return false;
   std::size_t start = 0;
@@ -45,11 +56,13 @@ bool validBranch(const std::string& branch) {
   }
   return true;
 }
+
 bool isHex(const std::string& value, std::size_t length) {
   if (value.size() != length) return false;
   for (unsigned char c : value) if (!std::isxdigit(c)) return false;
   return true;
 }
+
 std::string encodePathPart(const std::string& value) {
   static constexpr char hex[] = "0123456789ABCDEF";
   std::string result;
@@ -59,6 +72,20 @@ std::string encodePathPart(const std::string& value) {
   }
   return result;
 }
+
+std::string trim(const std::string& value) {
+  std::size_t a = 0, b = value.size();
+  while (a < b && std::isspace(static_cast<unsigned char>(value[a]))) ++a;
+  while (b > a && std::isspace(static_cast<unsigned char>(value[b - 1]))) --b;
+  return value.substr(a, b - a);
+}
+
+std::string unquote(const std::string& value) {
+  if (value.size() >= 2 && value.front() == '"' && value.back() == '"') return value.substr(1, value.size() - 2);
+  if (value.size() >= 2 && value.front() == '\'' && value.back() == '\'') return value.substr(1, value.size() - 2);
+  return value;
+}
+
 std::vector<std::array<std::string, 4>> readLock(const std::filesystem::path& path) {
   std::vector<std::array<std::string, 4>> records;
   std::ifstream input(path);
@@ -78,15 +105,13 @@ std::vector<std::array<std::string, 4>> readLock(const std::filesystem::path& pa
   }
   return records;
 }
-bool writeLock(const std::filesystem::path& path, const std::array<std::string, 4>& record) {
-  auto records = readLock(path);
-  records.erase(std::remove_if(records.begin(), records.end(), [&](const auto& current) { return current[0] == record[0]; }), records.end());
-  records.push_back(record);
+
+bool writeLockRecords(const std::filesystem::path& path, const std::vector<std::array<std::string, 4>>& records) {
   const auto temporary = path.string() + ".tmp";
   std::ofstream output(temporary, std::ios::trunc);
   if (!output) return false;
   output << "# Frankenstein dependency lock v1\n";
-  for (const auto& current : records) output << current[0] << '|' << current[1] << '|' << current[2] << '|' << current[3] << '\n';
+  for (const auto& r : records) output << r[0] << '|' << r[1] << '|' << r[2] << '|' << r[3] << '\n';
   output.close();
   if (!output) return false;
   std::error_code error;
@@ -95,21 +120,20 @@ bool writeLock(const std::filesystem::path& path, const std::array<std::string, 
   std::filesystem::rename(temporary, path, error);
   return !error;
 }
+
+bool writeLock(const std::filesystem::path& path, const std::array<std::string, 4>& record) {
+  auto records = readLock(path);
+  records.erase(std::remove_if(records.begin(), records.end(), [&](const auto& current) { return current[0] == record[0]; }), records.end());
+  records.push_back(record);
+  return writeLockRecords(path, records);
+}
+
 void removeLockEntry(const std::filesystem::path& path, const std::string& repo) {
   auto records = readLock(path);
   records.erase(std::remove_if(records.begin(), records.end(), [&](const auto& current) { return current[0] == repo; }), records.end());
-  const auto temporary = path.string() + ".tmp";
-  std::ofstream output(temporary, std::ios::trunc);
-  if (!output) return;
-  output << "# Frankenstein dependency lock v1\n";
-  for (const auto& current : records) output << current[0] << '|' << current[1] << '|' << current[2] << '|' << current[3] << '\n';
-  output.close();
-  if (!output) return;
-  std::error_code error;
-  std::filesystem::remove(path, error);
-  error.clear();
-  std::filesystem::rename(temporary, path, error);
+  writeLockRecords(path, records);
 }
+
 std::string sha256File(const std::filesystem::path& path) {
   const std::string command = "cmake -E sha256sum " + shellQuote(path.string());
 #ifdef _WIN32
@@ -132,6 +156,7 @@ std::string sha256File(const std::filesystem::path& path) {
   stream >> digest;
   return digest;
 }
+
 bool resolveCommit(const std::string& owner, const std::string& name, const std::string& branch, std::string& commit, std::string& error_message) {
 #ifdef FRANKENSTEIN_HAS_CPR
   const std::string url = "https://api.github.com/repos/" + owner + "/" + name + "/commits/" + encodePathPart(branch);
@@ -154,24 +179,231 @@ bool resolveCommit(const std::string& owner, const std::string& name, const std:
   return false;
 #endif
 }
-std::vector<std::pair<std::string, std::string>> readDependencies(const std::filesystem::path& manifest) {
-  std::vector<std::pair<std::string, std::string>> result;
+
+std::vector<Dependency> readDependencies(const std::filesystem::path& manifest) {
+  std::vector<Dependency> result;
   std::ifstream input(manifest);
+  if (!input) return result;
   std::string line;
-  bool in_dependencies = false;
+  Dependency current;
+  bool in_table = false;
+  auto flush = [&]() {
+    if (in_table && !current.name.empty()) result.push_back(current);
+    current = Dependency{};
+    in_table = false;
+  };
   while (std::getline(input, line)) {
-    if (line == "[dependencies]") { in_dependencies = true; continue; }
-    if (!line.empty() && line.front() == '[') { in_dependencies = false; continue; }
-    if (!in_dependencies) continue;
-    const auto first = line.find('"');
-    const auto middle = first == std::string::npos ? first : line.find('"', first + 1);
-    const auto value = middle == std::string::npos ? middle : line.find('"', middle + 1);
-    const auto last = value == std::string::npos ? value : line.find('"', value + 1);
-    if (first != std::string::npos && middle != std::string::npos && value != std::string::npos && last != std::string::npos)
-      result.emplace_back(line.substr(first + 1, middle - first - 1), line.substr(value + 1, last - value - 1));
+    const auto stripped = trim(line);
+    if (stripped.empty() || stripped.front() == '#') continue;
+    if (stripped.front() == '[') {
+      flush();
+      const auto close = stripped.find(']');
+      if (close == std::string::npos) continue;
+      const auto header = stripped.substr(1, close - 1);
+      const std::string prefix = "dependencies.";
+      if (header.rfind(prefix, 0) == 0) {
+        current.name = unquote(trim(header.substr(prefix.size())));
+        in_table = !current.name.empty();
+      }
+      continue;
+    }
+    if (!in_table) continue;
+    const auto eq = stripped.find('=');
+    if (eq == std::string::npos) continue;
+    const auto key = trim(stripped.substr(0, eq));
+    const auto value = unquote(trim(stripped.substr(eq + 1)));
+    if (key == "repository") current.repository = value;
+    else if (key == "branch") current.branch = value;
+    else if (key == "target") current.target = value;
   }
+  flush();
   return result;
 }
+
+bool writeManifest(const std::filesystem::path& path, const std::vector<Dependency>& dependencies) {
+  const auto temporary = path.string() + ".tmp";
+  std::ofstream out(temporary, std::ios::trunc);
+  if (!out) return false;
+  out << "# Frankenstein dependency manifest\n";
+  for (const auto& dep : dependencies) {
+    out << "\n[dependencies." << dep.name << "]\n";
+    out << "repository = \"" << dep.repository << "\"\n";
+    out << "branch = \"" << dep.branch << "\"\n";
+    if (!dep.target.empty()) out << "target = \"" << dep.target << "\"\n";
+  }
+  out.close();
+  if (!out) return false;
+  std::error_code ec;
+  std::filesystem::remove(path, ec);
+  ec.clear();
+  std::filesystem::rename(temporary, path, ec);
+  return !ec;
+}
+
+bool upsertDependency(const std::filesystem::path& manifest, const Dependency& dependency) {
+  auto deps = readDependencies(manifest);
+  auto it = std::find_if(deps.begin(), deps.end(), [&](const auto& d) {
+    return d.name == dependency.name || d.repository == dependency.repository;
+  });
+  if (it != deps.end()) *it = dependency;
+  else deps.push_back(dependency);
+  return writeManifest(manifest, deps);
+}
+
+bool removeDependencyEntry(const std::filesystem::path& manifest, const std::string& repo) {
+  auto deps = readDependencies(manifest);
+  const auto before = deps.size();
+  deps.erase(std::remove_if(deps.begin(), deps.end(), [&](const auto& d) { return d.repository == repo; }), deps.end());
+  if (deps.size() == before) return true;
+  return writeManifest(manifest, deps);
+}
+
+std::string cmakeString(const std::string& value) {
+  std::string out;
+  for (char c : value) {
+    if (c == '"' || c == '\\') out += '\\';
+    out += c;
+  }
+  return out;
+}
+
+bool detectTargets(const std::filesystem::path& project_root, const std::string& dependency_name, std::vector<std::string>& targets, std::string& error_message) {
+  const std::filesystem::path scratch = project_root / "external" / (".frankenstein-targets-" + dependency_name);
+  std::error_code ec;
+  std::filesystem::remove_all(scratch, ec);
+  std::filesystem::create_directories(scratch, ec);
+  if (ec) { error_message = "Could not create target detection directory: " + ec.message(); return false; }
+
+  const std::filesystem::path probe_dir = scratch / "probe";
+  std::filesystem::create_directories(probe_dir, ec);
+  if (ec) { std::filesystem::remove_all(scratch, ec); error_message = ec.message(); return false; }
+
+  const std::filesystem::path source_dir = project_root / "external" / dependency_name;
+  {
+    std::ofstream cmake(probe_dir / "CMakeLists.txt", std::ios::trunc);
+    if (!cmake) { std::filesystem::remove_all(scratch, ec); error_message = "Could not write detection CMakeLists.txt."; return false; }
+    cmake << "cmake_minimum_required(VERSION 3.16)\n"
+          << "project(frankenstein_target_probe LANGUAGES C CXX)\n"
+          << "set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)\n"
+          << "add_subdirectory(\"" << cmakeString(source_dir.string()) << "\" \"${CMAKE_BINARY_DIR}/dep\")\n"
+          << "file(WRITE \"${CMAKE_BINARY_DIR}/frankenstein_targets.txt\" \"\")\n"
+          << "get_cmake_property(_dirs DIRECTORIES)\n"
+          << "set(_seen)\n"
+          << "foreach(_dir IN LISTS _dirs)\n"
+          << "  get_property(_bs DIRECTORY \"${_dir}\" PROPERTY BUILDSYSTEM_TARGETS)\n"
+          << "  get_property(_al DIRECTORY \"${_dir}\" PROPERTY ALIASED_TARGETS)\n"
+          << "  foreach(_t IN LISTS _al)\n"
+          << "    list(APPEND _bs ${_t})\n"
+          << "  endforeach()\n"
+          << "  foreach(_t IN LISTS _bs)\n"
+          << "    if(_t IN_LIST _seen)\n"
+          << "      continue()\n"
+          << "    endif()\n"
+          << "    list(APPEND _seen ${_t})\n"
+          << "    get_target_property(_type ${_t} TYPE)\n"
+          << "    if(_type STREQUAL \"STATIC_LIBRARY\" OR _type STREQUAL \"SHARED_LIBRARY\" OR _type STREQUAL \"INTERFACE_LIBRARY\" OR _type STREQUAL \"OBJECT_LIBRARY\")\n"
+          << "      file(APPEND \"${CMAKE_BINARY_DIR}/frankenstein_targets.txt\" \"${_t}\\n\")\n"
+          << "    endif()\n"
+          << "  endforeach()\n"
+          << "endforeach()\n";
+  }
+
+  const std::filesystem::path build_dir = scratch / "build";
+  std::filesystem::create_directories(build_dir, ec);
+  if (ec) { std::filesystem::remove_all(scratch, ec); error_message = ec.message(); return false; }
+
+  const std::string configure =
+    "cmake -S " + shellQuote(probe_dir.string()) +
+    " -B " + shellQuote(build_dir.string()) +
+    " -DCMAKE_BUILD_TYPE=Release";
+
+  const std::filesystem::path log = scratch / "configure.log";
+  const std::string command = configure + " > " + shellQuote(log.string()) + " 2>&1";
+  const int status = std::system(command.c_str());
+  if (status != 0) {
+    std::ifstream log_in(log);
+    std::ostringstream text;
+    text << log_in.rdbuf();
+    std::filesystem::remove_all(scratch, ec);
+    error_message = "CMake failed to configure the dependency:\n" + text.str();
+    return false;
+  }
+
+  std::ifstream list_file(build_dir / "frankenstein_targets.txt");
+  if (!list_file) {
+    std::filesystem::remove_all(scratch, ec);
+    error_message = "CMake did not produce the target list.";
+    return false;
+  }
+
+  std::set<std::string> unique;
+  std::string line;
+  while (std::getline(list_file, line)) {
+    const auto cleaned = trim(line);
+    if (!cleaned.empty()) unique.insert(cleaned);
+  }
+  targets.assign(unique.begin(), unique.end());
+  std::filesystem::remove_all(scratch, ec);
+  return true;
+}
+
+bool chooseTarget(const std::string& repo, const std::vector<std::string>& candidates, const std::string& dependency_name, std::string& target) {
+  if (candidates.empty()) {
+    Console::warning("No linkable CMake library target was found for " + repo + ".");
+    Console::print("Set target manually in Frankenstein.toml under [dependencies." + dependency_name + "].");
+    return false;
+  }
+  if (candidates.size() == 1) {
+    target = candidates.front();
+    Console::print("Detected CMake target: " + target);
+    return true;
+  }
+  std::vector<std::string> options = candidates;
+  options.push_back("Enter target name manually");
+  const std::size_t index = prompt::select("Select CMake target for " + repo, options, 0);
+  if (index < candidates.size()) {
+    target = options[index];
+    Console::print("Selected CMake target: " + target);
+    return true;
+  }
+  const std::string manual = prompt::input("CMake target name", "");
+  if (manual.empty()) {
+    Console::error("No target selected.");
+    return false;
+  }
+  target = manual;
+  return true;
+}
+
+void appendCmakeBlock(const std::filesystem::path& cmake_file, const std::string& dependency_name, const std::string& target) {
+  std::ofstream out(cmake_file, std::ios::app);
+  if (!out) return;
+  out << "\n# BEGIN FRANKENSTEIN DEPENDENCY " << dependency_name << "\n"
+      << "add_subdirectory(external/" << dependency_name << " EXCLUDE_FROM_ALL)\n"
+      << "if(NOT TARGET " << target << ")\n"
+      << "  message(FATAL_ERROR \"Frankenstein: expected CMake target '" << target << "' from external/" << dependency_name << "'.\")\n"
+      << "endif()\n"
+      << "target_link_libraries(${PROJECT_NAME} PRIVATE " << target << ")\n"
+      << "# END FRANKENSTEIN DEPENDENCY " << dependency_name << "\n";
+}
+
+bool removeCmakeBlock(const std::filesystem::path& cmake_file, const std::string& dependency_name) {
+  std::ifstream in(cmake_file);
+  if (!in) return false;
+  std::string content((std::istreambuf_iterator<char>(in)), {});
+  in.close();
+  const std::string begin = "# BEGIN FRANKENSTEIN DEPENDENCY " + dependency_name;
+  const std::string end = "# END FRANKENSTEIN DEPENDENCY " + dependency_name;
+  auto a = content.find(begin);
+  auto b = a == std::string::npos ? a : content.find(end, a);
+  if (a == std::string::npos || b == std::string::npos) return true;
+  b = content.find('\n', b);
+  content.erase(a, b == std::string::npos ? std::string::npos : b - a + 1);
+  std::ofstream out(cmake_file, std::ios::trunc);
+  out << content;
+  return static_cast<bool>(out);
+}
+
 int executeNested(DependencyCommand::Action action, const std::vector<std::string>& arguments) {
   std::vector<std::string> storage = {"frankenstein", action == DependencyCommand::Action::Add ? "add" : "remove"};
   storage.insert(storage.end(), arguments.begin(), arguments.end());
@@ -185,20 +417,33 @@ int executeNested(DependencyCommand::Action action, const std::vector<std::strin
 
 int DependencyCommand::execute(const CLI& cli) {
   namespace fs = std::filesystem;
-  if (action == Action::List || action == Action::Install || action == Action::Update) {
-    const auto dependencies = readDependencies("Frankenstein.toml");
-    if (action == Action::List) {
-      if (dependencies.empty()) { Console::print("No dependencies."); return 0; }
-      for (const auto& [repo, branch] : dependencies) Console::print("  " + repo + " (" + branch + ")");
-      return 0;
+  const fs::path root = fs::current_path();
+  const fs::path manifest_path = root / "Frankenstein.toml";
+  const fs::path lock_path = root / "Frankenstein.lock";
+  const fs::path external = root / "external";
+  std::error_code ec;
+
+  if (action == Action::List) {
+    const auto dependencies = readDependencies(manifest_path);
+    if (dependencies.empty()) { Console::print("No dependencies."); return 0; }
+    for (const auto& dep : dependencies) {
+      Console::print("  " + dep.name + "  " + dep.repository + " (" + dep.branch + ")  target=" + (dep.target.empty() ? "<unset>" : dep.target));
     }
-    for (const auto& [repo, branch] : dependencies) {
-      const auto slash = repo.find('/');
-      const fs::path installed = slash == std::string::npos ? fs::path{} : fs::path("external") / repo.substr(slash + 1);
-      const auto records = readLock("Frankenstein.lock");
-      const auto lock = std::find_if(records.begin(), records.end(), [&](const auto& item) { return item[0] == repo; });
+    return 0;
+  }
+
+  if (action == Action::Install || action == Action::Update) {
+    const auto dependencies = readDependencies(manifest_path);
+    if (dependencies.empty()) { Console::print("No dependencies."); return 0; }
+    for (const auto& dep : dependencies) {
+      const auto slash = dep.repository.find('/');
+      const std::string dep_name = slash == std::string::npos ? dep.repository : dep.repository.substr(slash + 1);
+      const fs::path installed = external / dep_name;
+      const auto records = readLock(lock_path);
+      const auto lock = std::find_if(records.begin(), records.end(), [&](const auto& item) { return item[0] == dep.repository; });
+
       if (action == Action::Install && lock == records.end()) {
-        Console::error("No locked revision for " + repo + ". Add it again to generate Frankenstein.lock.");
+        Console::error("No locked revision for " + dep.repository + ". Run 'frankenstein add' again.");
         return 1;
       }
       if (action == Action::Install && fs::exists(installed)) {
@@ -208,24 +453,28 @@ int DependencyCommand::execute(const CLI& cli) {
         std::getline(marker, installed_branch);
         std::getline(marker, installed_commit);
         std::getline(marker, installed_sha);
-        if (installed_repo == repo && installed_branch == branch && installed_commit == (*lock)[2] && installed_sha == (*lock)[3]) continue;
-        Console::error("Installed files for " + repo + " do not match Frankenstein.lock; remove the dependency before installing.");
+        if (installed_repo == dep.repository && installed_branch == dep.branch && installed_commit == (*lock)[2] && installed_sha == (*lock)[3]) continue;
+        Console::error("Installed files for " + dep.repository + " do not match Frankenstein.lock.");
         return 1;
       }
       if (action == Action::Update && fs::exists(installed)) {
-        if (executeNested(Action::Remove, {repo}) != 0) return 1;
+        if (executeNested(Action::Remove, {dep.repository}) != 0) return 1;
       }
       if (action == Action::Install) {
-        if (executeNested(Action::Add, {repo + ":" + branch, "--rev", (*lock)[2], "--sha256", (*lock)[3]}) != 0) return 1;
-      } else if (executeNested(Action::Add, {repo + ":" + branch}) != 0) return 1;
+        if (executeNested(Action::Add, {dep.repository + ":" + dep.branch, "--rev", (*lock)[2], "--sha256", (*lock)[3]}) != 0) return 1;
+      } else {
+        if (executeNested(Action::Add, {dep.repository + ":" + dep.branch}) != 0) return 1;
+      }
     }
     Console::success(action == Action::Install ? "Dependencies installed." : "Dependencies updated.");
     return 0;
   }
+
   if (cli.getArguments().empty()) {
     Console::error(action == Action::Add ? "Usage: frankenstein add owner/repository[:branch]" : "Usage: frankenstein remove owner/repository");
     return 1;
   }
+
   std::string repo = cli.getArguments()[0];
   std::string branch = "main";
   const std::string requested_commit = cli.hasFlag("--rev") ? cli.getFlagValue("--rev") : std::string{};
@@ -242,10 +491,7 @@ int DependencyCommand::execute(const CLI& cli) {
   }
   const std::string owner = repo.substr(0, slash);
   const std::string name = repo.substr(slash + 1);
-  const fs::path root = fs::current_path();
-  const fs::path external = root / "external";
   const fs::path destination = external / name;
-  std::error_code ec;
 
   if (action == Action::Remove) {
     if (!fs::exists(destination, ec) || ec) { Console::error("Dependency is not installed: " + repo); return 1; }
@@ -255,36 +501,17 @@ int DependencyCommand::execute(const CLI& cli) {
     std::getline(marker_file, recorded_repo);
     if (!marker_file && recorded_repo.empty()) { Console::error("Refusing to remove an unmanaged external/ directory: " + destination.string()); return 1; }
     if (recorded_repo != repo) { Console::error("Dependency metadata does not match " + repo + "; refusing removal."); return 1; }
-    const fs::path cmake_file = root / "CMakeLists.txt";
-    std::ifstream in(cmake_file);
-    std::string content((std::istreambuf_iterator<char>(in)), {});
-    in.close();
-    std::string recorded_branch;
-    std::getline(marker_file, recorded_branch);
     marker_file.close();
-    const std::string begin = "# BEGIN FRANKENSTEIN DEPENDENCY " + name;
-    const std::string end = "# END FRANKENSTEIN DEPENDENCY " + name;
-    auto a = content.find(begin);
-    auto b = a == std::string::npos ? a : content.find(end, a);
-    if (a != std::string::npos && b != std::string::npos) {
-      b = content.find('\n', b);
-      content.erase(a, b == std::string::npos ? std::string::npos : b - a + 1);
-      std::ofstream out(cmake_file, std::ios::trunc); out << content;
-      if (!out) { Console::error("Could not update CMakeLists.txt."); return 1; }
+    const fs::path cmake_file = root / "CMakeLists.txt";
+    if (fs::exists(cmake_file)) {
+      if (!removeCmakeBlock(cmake_file, name)) { Console::error("Could not update CMakeLists.txt."); return 1; }
     }
     fs::remove_all(destination, ec);
     if (ec) { Console::error("Could not remove dependency: " + ec.message()); return 1; }
-    const fs::path manifest = root / "Frankenstein.toml";
-    if (fs::exists(manifest)) {
-      std::ifstream manifest_in(manifest);
-      std::string text((std::istreambuf_iterator<char>(manifest_in)), {});
-      manifest_in.close();
-      const std::string line = "\"" + repo + "\" = \"" + recorded_branch + "\"\n";
-      const auto at = text.find(line);
-      if (at != std::string::npos) { text.erase(at, line.size()); std::ofstream manifest_out(manifest, std::ios::trunc); manifest_out << text; }
-    }
-    removeLockEntry(root / "Frankenstein.lock", repo);
-    Console::success("Removed " + repo); return 0;
+    if (fs::exists(manifest_path)) removeDependencyEntry(manifest_path, repo);
+    removeLockEntry(lock_path, repo);
+    Console::success("Removed " + repo);
+    return 0;
   }
 
   if (!fs::exists(root / "CMakeLists.txt", ec) || ec) { Console::error("Run this command in a project containing CMakeLists.txt."); return 1; }
@@ -357,61 +584,44 @@ int DependencyCommand::execute(const CLI& cli) {
     marker << repo << '\n' << branch << '\n' << commit << '\n' << archive_sha << '\n';
     if (!marker) { fs::remove_all(destination, ec); Console::error("Could not write dependency metadata."); return 1; }
   }
-  if (!writeLock(root / "Frankenstein.lock", {repo, branch, commit, archive_sha})) {
+
+  if (!fs::exists(destination / "CMakeLists.txt")) {
+    fs::remove_all(destination, ec);
+    Console::error("Dependency does not ship a CMakeLists.txt; cannot integrate with CMake.");
+    return 1;
+  }
+
+  std::vector<std::string> candidates;
+  std::string detect_error;
+  if (!detectTargets(root, name, candidates, detect_error)) {
+    fs::remove_all(destination, ec);
+    Console::error("Target detection failed for " + repo + ".\n" + detect_error);
+    return 1;
+  }
+
+  std::string target;
+  if (!chooseTarget(repo, candidates, name, target)) {
+    fs::remove_all(destination, ec);
+    Console::error("Aborting add: no CMake target selected.");
+    return 1;
+  }
+
+  Dependency dependency{name, repo, branch, target};
+  if (!upsertDependency(manifest_path, dependency)) {
+    fs::remove_all(destination, ec);
+    Console::error("Could not update Frankenstein.toml.");
+    return 1;
+  }
+
+  if (!writeLock(lock_path, {repo, branch, commit, archive_sha})) {
     fs::remove_all(destination, ec);
     Console::error("Could not update Frankenstein.lock.");
     return 1;
   }
-  const fs::path manifest = root / "Frankenstein.toml";
-  if (fs::exists(manifest)) {
-    std::ifstream manifest_in(manifest);
-    std::string text((std::istreambuf_iterator<char>(manifest_in)), {});
-    manifest_in.close();
-    if (text.find("[dependencies]") == std::string::npos) text += "\n[dependencies]\n";
-    text += "\"" + repo + "\" = \"" + branch + "\"\n";
-    std::ofstream manifest_out(manifest, std::ios::trunc); manifest_out << text;
-    if (!manifest_out) { fs::remove_all(destination, ec); removeLockEntry(root / "Frankenstein.lock", repo); Console::error("Could not update Frankenstein.toml."); return 1; }
-  }
 
-  if (fs::exists(destination / "CMakeLists.txt")) {
-    std::ofstream cmake(root / "CMakeLists.txt", std::ios::app);
-    cmake << "\n# BEGIN FRANKENSTEIN DEPENDENCY " << name << "\n";
-    if (name == "cpr") {
-      cmake << "set(CPR_USE_SYSTEM_CURL OFF CACHE BOOL \"\" FORCE)\n"
-          << "set(CPR_CURL_USE_LIBPSL OFF CACHE BOOL \"\" FORCE)\n"
-          << "set(CPR_CURL_USE_NGHTTP2 OFF CACHE BOOL \"\" FORCE)\n"
-          << "set(CPR_ENABLE_INSTALL OFF CACHE BOOL \"\" FORCE)\n"
-          << "set(CPR_BUILD_TESTS OFF CACHE BOOL \"\" FORCE)\n";
-    }
-    cmake << "add_subdirectory(external/" << name << " EXCLUDE_FROM_ALL)\n"
-        << "if(TARGET " << name << "::" << name << ")\n"
-        << "  target_link_libraries(${PROJECT_NAME} PRIVATE " << name << "::" << name << ")\n"
-        << "elseif(TARGET " << name << ")\n"
-        << "  target_link_libraries(${PROJECT_NAME} PRIVATE " << name << ")\n"
-        << "else()\n"
-        << "  get_filename_component(_frankenstein_dep_dir \"${CMAKE_CURRENT_SOURCE_DIR}/external/" << name << "\" ABSOLUTE)\n"
-        << "  get_property(_frankenstein_dep_targets DIRECTORY \"${_frankenstein_dep_dir}\" PROPERTY BUILDSYSTEM_TARGETS)\n"
-        << "  set(_frankenstein_linkable_targets)\n"
-        << "  foreach(_frankenstein_target IN LISTS _frankenstein_dep_targets)\n"
-        << "    get_target_property(_frankenstein_type ${_frankenstein_target} TYPE)\n"
-        << "    if(_frankenstein_type MATCHES \"_LIBRARY$\")\n"
-        << "      list(APPEND _frankenstein_linkable_targets ${_frankenstein_target})\n"
-        << "    endif()\n"
-        << "  endforeach()\n"
-        << "  list(LENGTH _frankenstein_linkable_targets _frankenstein_linkable_count)\n"
-        << "  if(_frankenstein_linkable_count EQUAL 1)\n"
-        << "    list(GET _frankenstein_linkable_targets 0 _frankenstein_linkable_target)\n"
-        << "    target_link_libraries(${PROJECT_NAME} PRIVATE ${_frankenstein_linkable_target})\n"
-        << "  else()\n"
-        << "    message(STATUS \"Frankenstein: no unique library target detected for " << name << "; inspect external/" << name << " manually.\")\n"
-        << "  endif()\n"
-        << "endif()\n";
-    cmake << "# END FRANKENSTEIN DEPENDENCY " << name << "\n";
-    if (!cmake) { Console::error("Library downloaded, but CMakeLists.txt could not be updated."); return 1; }
-  } else {
-    Console::warning("No CMakeLists.txt found; source is saved in external/" + name + " for manual integration.");
-  }
-  Console::success("Added " + repo + " to external/" + name);
+  appendCmakeBlock(root / "CMakeLists.txt", name, target);
+
+  Console::success("Added " + repo + " to external/" + name + " (target: " + target + ")");
   return 0;
 #endif
 }

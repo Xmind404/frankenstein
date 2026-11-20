@@ -23,6 +23,10 @@ function Show-Logo {
 
 function Write-ItemLine([string]$Message) { Write-Host "◆ $Message" -ForegroundColor Green }
 
+function Clear-Screen {
+  try { [Console]::Clear() } catch { Clear-Host }
+}
+
 function Read-YesNo([string]$Question) {
   while ($true) {
     $answer = (Read-Host "◆ $Question [Y/N]").Trim()
@@ -35,18 +39,23 @@ function Read-YesNo([string]$Question) {
 function Select-Action([string[]]$Options) {
   $selected = 0
   while ($true) {
-    Clear-Host
+    Clear-Screen
     Show-Logo
     Write-Host "`n◆ Choose an action:" -ForegroundColor Green
+    Write-Host '│' -ForegroundColor DarkGray
     for ($i = 0; $i -lt $Options.Count; $i++) {
       if ($i -eq $selected) { Write-Host "● $($Options[$i])" -ForegroundColor Green }
       else { Write-Host "○ $($Options[$i])" -ForegroundColor DarkGray }
     }
-    Write-Host '└  ↑/↓ to navigate • Enter: confirm' -ForegroundColor DarkGray
+    Write-Host '└  ↑/↓ to navigate • Enter: confirm • Esc: cancel' -ForegroundColor DarkGray
+    Start-Sleep -Milliseconds 10
     $key = [Console]::ReadKey($true)
-    if ($key.Key -eq [ConsoleKey]::Up -and $selected -gt 0) { $selected-- }
-    elseif ($key.Key -eq [ConsoleKey]::Down -and $selected -lt ($Options.Count - 1)) { $selected++ }
-    elseif ($key.Key -eq [ConsoleKey]::Enter) { return $selected }
+    switch ($key.Key) {
+      ([ConsoleKey]::UpArrow)   { if ($selected -gt 0) { $selected-- } }
+      ([ConsoleKey]::DownArrow) { if ($selected -lt ($Options.Count - 1)) { $selected++ } }
+      ([ConsoleKey]::Enter)     { Write-Host ''; return $selected }
+      ([ConsoleKey]::Escape)    { Write-Host ''; return -1 }
+    }
   }
 }
 
