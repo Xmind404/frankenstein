@@ -1,4 +1,3 @@
-
 #include "project_template.h"
 
 #include <array>
@@ -35,7 +34,12 @@ namespace {
       "\n"
       "set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n"
       "\n"
-      "add_executable(${PROJECT_NAME} " + source_file + ")\n";
+      "include(${CMAKE_CURRENT_SOURCE_DIR}/frankenstein.sources.cmake OPTIONAL)\n"
+      "if(NOT DEFINED FRANKENSTEIN_SOURCES)\n"
+      "  set(FRANKENSTEIN_SOURCES \"" + source_file + "\")\n"
+      "endif()\n"
+      "\n"
+      "add_executable(${PROJECT_NAME} ${FRANKENSTEIN_SOURCES})";
   }
 
   std::string createClangFormat(
@@ -47,14 +51,14 @@ namespace {
       "IndentWidth: 2\n"
       "TabWidth: 2\n"
       "UseTab: Never\n"
-      "ColumnLimit: 120\n";
+      "ColumnLimit: 120";
 
     if (language == configuration::Language::C) {
-      content += "Language: C\n";
+      content += "\nLanguage: C";
     } else {
       content +=
-        "Language: Cpp\n"
-        "Standard: c++" + standard + "\n";
+        "\nLanguage: Cpp\n"
+        "Standard: c++" + standard;
     }
 
     return content;
@@ -69,7 +73,7 @@ namespace {
         "  printf(\"Hello, frankenstein!\\n\");\n"
         "\n"
         "  return 0;\n"
-        "}\n";
+        "}";
     }
 
     return
@@ -79,7 +83,7 @@ namespace {
       "  std::cout << \"Hello, frankenstein!\" << '\\n';\n"
       "\n"
       "  return 0;\n"
-      "}\n";
+      "}";
   }
 
 }
@@ -96,7 +100,7 @@ bool ProjectTemplate::create(
 
   const std::string source_file = is_c ? "src/main.c" : "src/main.cpp";
 
-  const std::array<File, 8> files = {{
+  const std::array<File, 9> files = {{
     {
       "CMakeLists.txt",
       createCMakeLists(
@@ -108,7 +112,7 @@ bool ProjectTemplate::create(
     {
       ".clangd",
       "CompileFlags:\n"
-      "  CompilationDatabase: .\n"
+      "  CompilationDatabase: ."
     },
     {
       ".clang-format",
@@ -121,24 +125,25 @@ bool ProjectTemplate::create(
       "CMakeFiles/\n"
       "CMakeCache.txt\n"
       "compile_commands.json\n"
+      "frankenstein.sources.cmake\n"
       "*.o\n"
       "*.a\n"
       "*.so\n"
       "*.exe\n"
       ".idea/\n"
       ".vscode/\n"
-      ".DS_Store\n"
+      ".DS_Store"
     },
     {
       "README.md",
       "# " + project_path.filename().string() + "\n"
       "\n"
-      "A project created with Frankenstein.\n"
+      "A project created with Frankenstein."
     },
     {
       "Frankenstein.toml",
       std::string("[project]\nname = \"") + project_path.filename().string() +
-      "\"\nversion = \"0.1.0\"\nstandard = \"" + standard + "\"\n\n[dependencies]\n"
+      "\"\nversion = \"0.1.0\"\nstandard = \"" + standard + "\"\n\n[sources]\nfiles = [\n  \"" + source_file + "\",\n]\n\n[dependencies]"
     },
     {
       source_file,
@@ -147,6 +152,10 @@ bool ProjectTemplate::create(
     {
       "tests/.gitkeep",
       ""
+    },
+    {
+      "frankenstein.sources.cmake",
+      "set(FRANKENSTEIN_SOURCES\n  \"" + source_file + "\"\n)"
     }
   }};
 

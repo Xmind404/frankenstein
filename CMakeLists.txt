@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(frankenstein VERSION 1.0.10 LANGUAGES CXX)
+project(frankenstein VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +34,8 @@ add_executable(frankenstein
   src/commands/run_command.cpp
   src/commands/dependency_command.cpp
   src/commands/diagnostics_command.cpp
+  src/configuration/project_sources.cpp
+  src/commands/source_command.cpp
 )
 
 target_include_directories(frankenstein PRIVATE src)

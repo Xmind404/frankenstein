@@ -1,6 +1,8 @@
 #include "dependency_command.h"
+#include "source_command.h"
 #include "../cli/console.h"
 #include "../cli/prompt.h"
+#include "../configuration/project_sources.h"
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -239,22 +241,32 @@ bool writeManifest(const std::filesystem::path& path, const std::vector<Manifest
   const auto temporary = path.string() + ".tmp";
   std::ofstream out(temporary, std::ios::trunc);
   if (!out) return false;
+  std::ostringstream buffer;
   bool has_project = false;
+  bool first_section = true;
   for (const auto& section : sections) {
     if (isDependenciesHeader(section.header)) continue;
     if (section.header == "project") has_project = true;
-    if (!section.header.empty()) out << "\n[" << section.header << "]\n";
-    for (const auto& line : section.lines) out << line << '\n';
+    if (!section.header.empty()) {
+      if (!first_section) buffer << '\n';
+      buffer << "[" << section.header << "]\n";
+      first_section = false;
+    }
+    for (const auto& line : section.lines) buffer << line << '\n';
   }
   if (!has_project) {
-    out << "\n[project]\nname = \"frankenstein-project\"\nversion = \"0.1.0\"\nstandard = \"20\"\n";
+    if (!first_section) buffer << '\n';
+    buffer << "[project]\nname = \"frankenstein-project\"\nversion = \"0.1.0\"\nstandard = \"20\"\n";
   }
   for (const auto& dep : dependencies) {
-    out << "\n[dependencies." << dep.name << "]\n";
-    out << "repository = \"" << dep.repository << "\"\n";
-    out << "branch = \"" << dep.branch << "\"\n";
-    if (!dep.target.empty()) out << "target = \"" << dep.target << "\"\n";
+    buffer << "\n[dependencies." << dep.name << "]\n";
+    buffer << "repository = \"" << dep.repository << "\"\n";
+    buffer << "branch = \"" << dep.branch << "\"\n";
+    if (!dep.target.empty()) buffer << "target = \"" << dep.target << "\"\n";
   }
+  std::string content = buffer.str();
+  if (!content.empty() && content.back() == '\n') content.pop_back();
+  out << content;
   out.close();
   if (!out) return false;
   std::error_code ec;
@@ -415,7 +427,7 @@ void appendCmakeBlock(const std::filesystem::path& cmake_file, const std::string
       << "  message(FATAL_ERROR \"Frankenstein: expected CMake target '" << target << "' from external/" << dependency_name << "'.\")\n"
       << "endif()\n"
       << "target_link_libraries(${PROJECT_NAME} PRIVATE " << target << ")\n"
-      << "# END FRANKENSTEIN DEPENDENCY " << dependency_name << "\n";
+      << "# END FRANKENSTEIN DEPENDENCY " << dependency_name;
 }
 
 bool removeCmakeBlock(const std::filesystem::path& cmake_file, const std::string& dependency_name) {
@@ -448,6 +460,21 @@ int executeNested(DependencyCommand::Action action, const std::vector<std::strin
 
 int DependencyCommand::execute(const CLI& cli) {
   namespace fs = std::filesystem;
+
+  if (cli.getArguments().empty()) {
+    Console::error(action == Action::Add
+      ? "Usage: frankenstein add owner/repository[:branch] or frankenstein add src/file.cpp"
+      : "Usage: frankenstein remove owner/repository or frankenstein remove src/file.cpp");
+    return 1;
+  }
+
+  if ((action == Action::Add || action == Action::Remove) &&
+      configuration::isSourceFileArgument(cli.getArguments()[0])) {
+    return SourceCommand(
+      action == Action::Add ? SourceCommand::Action::Add : SourceCommand::Action::Remove
+    ).execute(cli);
+  }
+
   const fs::path root = fs::current_path();
   const fs::path manifest_path = root / "Frankenstein.toml";
   const fs::path lock_path = root / "Frankenstein.lock";
@@ -499,11 +526,6 @@ int DependencyCommand::execute(const CLI& cli) {
     }
     Console::success(action == Action::Install ? "Dependencies installed." : "Dependencies updated.");
     return 0;
-  }
-
-  if (cli.getArguments().empty()) {
-    Console::error(action == Action::Add ? "Usage: frankenstein add owner/repository[:branch]" : "Usage: frankenstein remove owner/repository");
-    return 1;
   }
 
   std::string repo = cli.getArguments()[0];

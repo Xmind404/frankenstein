@@ -1,5 +1,6 @@
 #include "build_command.h"
 #include "../cli/console.h"
+#include "../configuration/project_sources.h"
 #include "../configuration/project_standard_sync.h"
 #include <cstdlib>
 #include <filesystem>
@@ -56,6 +57,11 @@ int BuildCommand::execute(const CLI& cli) {
   }
   if (!standard_sync_message.empty()) {
     Console::print(standard_sync_message);
+  }
+  const auto sources = configuration::readSources(fs::current_path() / "Frankenstein.toml");
+  if (!configuration::generateSourcesCmake(fs::current_path(), sources)) {
+    Console::error("Could not generate frankenstein.sources.cmake.");
+    return 1;
   }
   if (action == Action::Check) {
     const int result = cmake("-S . -B " + quote(build_dir.string()));

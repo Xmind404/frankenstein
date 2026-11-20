@@ -90,13 +90,17 @@ void Application::printHelp(const std::string& command) const {
   if (!command.empty()) {
     std::cout << "Usage: frankenstein " << command << " [OPTIONS] [ARGS]\n\n";
     if (command == "add") {
-      std::cout << "Add a GitHub dependency from an HTTPS ZIP archive.\n\n"
+      std::cout << "Add a GitHub dependency or a source file.\n\n"
             << "Usage: frankenstein add owner/repository[:branch]\n"
-            << "Example: frankenstein add libcpr/cpr:master\n\n"
-            << "The selected branch is resolved to a commit and recorded with the\n"
-            << "archive SHA-256 in Frankenstein.lock. CMake libraries are added\n"
-            << "and linked when Frankenstein can identify a target.\n"
-            << "Header-only or ambiguous libraries may need manual CMake setup.\n";
+            << "       frankenstein add src/file.cpp\n"
+            << "Example: frankenstein add libcpr/cpr:master\n"
+            << "Example: frankenstein add src/files.cpp\n\n"
+            << "Repository dependencies are resolved to a commit and recorded with the\n"
+            << "archive SHA-256 in Frankenstein.lock. CMake libraries are added and linked\n"
+            << "when Frankenstein can identify a target. Header-only or ambiguous libraries\n"
+            << "may need manual CMake setup.\n\n"
+            << "Source files are recorded in Frankenstein.toml under [sources].\n"
+            << "CMake reads them through the generated frankenstein.sources.cmake.\n";
       return;
     }
     if (command == "install") {
@@ -114,9 +118,13 @@ void Application::printHelp(const std::string& command) const {
       return;
     }
     if (command == "remove" || command == "rm") {
-      std::cout << "Usage: frankenstein remove owner/repository\n"
-            << "Remove a managed dependency from external/, CMakeLists.txt,\n"
-            << "Frankenstein.toml and Frankenstein.lock.\n";
+      std::cout << "Remove a dependency or a source file.\n\n"
+            << "Usage: frankenstein remove owner/repository\n"
+            << "       frankenstein remove src/file.cpp\n\n"
+            << "Repository dependencies are removed from external/, CMakeLists.txt,\n"
+            << "Frankenstein.toml and Frankenstein.lock.\n\n"
+            << "Source files are removed from Frankenstein.toml [sources] only;\n"
+            << "the file itself stays on disk.\n";
       return;
     }
     else if (command == "new") std::cout << "Create a new C/C++ project\n";
@@ -135,8 +143,8 @@ void Application::printHelp(const std::string& command) const {
         << "Commands:\n"
         << "    new       Create a new project\n"
         << "    init      Initialize an existing project\n"
-        << "    add       Add a GitHub ZIP dependency\n"
-        << "    remove    Remove a dependency\n"
+        << "    add       Add a GitHub dependency or a source file\n"
+        << "    remove    Remove a dependency or a source file\n"
         << "    install   Install dependencies from the manifest\n"
         << "    update    Update manifest dependencies\n"
         << "    list      List project dependencies\n"
@@ -149,9 +157,10 @@ void Application::printHelp(const std::string& command) const {
         << "    test      Run project tests\n"
         << "    clean     Remove build artifacts\n"
         << "    help      Display command help\n\n"
-        << "Dependencies use HTTPS ZIP archives. Frankenstein records the resolved\n"
-        << "commit and SHA-256 in Frankenstein.lock; install verifies the archive.\n"
-        << "CMake targets are linked when a unique library target can be detected.\n"
-        << "Libraries without CMake support or with ambiguous targets need manual setup.\n\n"
+        << "Sources are declared in Frankenstein.toml under [sources].\n"
+        << "Frankenstein regenerates frankenstein.sources.cmake before every build,\n"
+        << "so removing a source from the manifest also removes it from the build.\n"
+        << "Dependencies use HTTPS ZIP archives; the resolved commit and SHA-256\n"
+        << "are recorded in Frankenstein.lock and verified on install.\n\n"
         << "See 'frankenstein help <command>' for more information.\n";
 }
