@@ -27,6 +27,11 @@ struct Dependency {
   std::string target;
 };
 
+struct ManifestSection {
+  std::string header;
+  std::vector<std::string> lines;
+};
+
 std::string shellQuote(const std::string& value) {
 #ifdef _WIN32
   std::string out = "\"";
@@ -110,7 +115,6 @@ bool writeLockRecords(const std::filesystem::path& path, const std::vector<std::
   const auto temporary = path.string() + ".tmp";
   std::ofstream output(temporary, std::ios::trunc);
   if (!output) return false;
-  output << "# Frankenstein dependency lock v1\n";
   for (const auto& r : records) output << r[0] << '|' << r[1] << '|' << r[2] << '|' << r[3] << '\n';
   output.close();
   if (!output) return false;
@@ -180,51 +184,71 @@ bool resolveCommit(const std::string& owner, const std::string& name, const std:
 #endif
 }
 
-std::vector<Dependency> readDependencies(const std::filesystem::path& manifest) {
-  std::vector<Dependency> result;
+bool isDependenciesHeader(const std::string& header) {
+  return header == "dependencies" || header.rfind("dependencies.", 0) == 0;
+}
+
+std::vector<ManifestSection> readManifestSections(const std::filesystem::path& manifest) {
+  std::vector<ManifestSection> sections;
   std::ifstream input(manifest);
-  if (!input) return result;
+  if (!input) return sections;
+  ManifestSection current;
+  current.header = "";
   std::string line;
-  Dependency current;
-  bool in_table = false;
   auto flush = [&]() {
-    if (in_table && !current.name.empty()) result.push_back(current);
-    current = Dependency{};
-    in_table = false;
+    if (!current.header.empty() || !current.lines.empty()) sections.push_back(current);
+    current = ManifestSection{};
   };
   while (std::getline(input, line)) {
     const auto stripped = trim(line);
-    if (stripped.empty() || stripped.front() == '#') continue;
-    if (stripped.front() == '[') {
+    if (!stripped.empty() && stripped.front() == '[') {
       flush();
       const auto close = stripped.find(']');
-      if (close == std::string::npos) continue;
-      const auto header = stripped.substr(1, close - 1);
-      const std::string prefix = "dependencies.";
-      if (header.rfind(prefix, 0) == 0) {
-        current.name = unquote(trim(header.substr(prefix.size())));
-        in_table = !current.name.empty();
-      }
+      if (close != std::string::npos) current.header = stripped.substr(1, close - 1);
       continue;
     }
-    if (!in_table) continue;
-    const auto eq = stripped.find('=');
-    if (eq == std::string::npos) continue;
-    const auto key = trim(stripped.substr(0, eq));
-    const auto value = unquote(trim(stripped.substr(eq + 1)));
-    if (key == "repository") current.repository = value;
-    else if (key == "branch") current.branch = value;
-    else if (key == "target") current.target = value;
+    current.lines.push_back(line);
   }
   flush();
+  return sections;
+}
+
+std::vector<Dependency> readDependencies(const std::filesystem::path& manifest) {
+  std::vector<Dependency> result;
+  for (const auto& section : readManifestSections(manifest)) {
+    if (section.header.rfind("dependencies.", 0) != 0) continue;
+    Dependency dep;
+    dep.name = unquote(trim(section.header.substr(std::string("dependencies.").size())));
+    for (const auto& raw : section.lines) {
+      const auto stripped = trim(raw);
+      if (stripped.empty() || stripped.front() == '#') continue;
+      const auto eq = stripped.find('=');
+      if (eq == std::string::npos) continue;
+      const auto key = trim(stripped.substr(0, eq));
+      const auto value = unquote(trim(stripped.substr(eq + 1)));
+      if (key == "repository") dep.repository = value;
+      else if (key == "branch") dep.branch = value;
+      else if (key == "target") dep.target = value;
+    }
+    if (!dep.name.empty()) result.push_back(dep);
+  }
   return result;
 }
 
-bool writeManifest(const std::filesystem::path& path, const std::vector<Dependency>& dependencies) {
+bool writeManifest(const std::filesystem::path& path, const std::vector<ManifestSection>& sections, const std::vector<Dependency>& dependencies) {
   const auto temporary = path.string() + ".tmp";
   std::ofstream out(temporary, std::ios::trunc);
   if (!out) return false;
-  out << "# Frankenstein dependency manifest\n";
+  bool has_project = false;
+  for (const auto& section : sections) {
+    if (isDependenciesHeader(section.header)) continue;
+    if (section.header == "project") has_project = true;
+    if (!section.header.empty()) out << "\n[" << section.header << "]\n";
+    for (const auto& line : section.lines) out << line << '\n';
+  }
+  if (!has_project) {
+    out << "\n[project]\nname = \"frankenstein-project\"\nversion = \"0.1.0\"\nstandard = \"20\"\n";
+  }
   for (const auto& dep : dependencies) {
     out << "\n[dependencies." << dep.name << "]\n";
     out << "repository = \"" << dep.repository << "\"\n";
@@ -241,21 +265,23 @@ bool writeManifest(const std::filesystem::path& path, const std::vector<Dependen
 }
 
 bool upsertDependency(const std::filesystem::path& manifest, const Dependency& dependency) {
+  auto sections = readManifestSections(manifest);
   auto deps = readDependencies(manifest);
   auto it = std::find_if(deps.begin(), deps.end(), [&](const auto& d) {
     return d.name == dependency.name || d.repository == dependency.repository;
   });
   if (it != deps.end()) *it = dependency;
   else deps.push_back(dependency);
-  return writeManifest(manifest, deps);
+  return writeManifest(manifest, sections, deps);
 }
 
 bool removeDependencyEntry(const std::filesystem::path& manifest, const std::string& repo) {
+  auto sections = readManifestSections(manifest);
   auto deps = readDependencies(manifest);
   const auto before = deps.size();
   deps.erase(std::remove_if(deps.begin(), deps.end(), [&](const auto& d) { return d.repository == repo; }), deps.end());
   if (deps.size() == before) return true;
-  return writeManifest(manifest, deps);
+  return writeManifest(manifest, sections, deps);
 }
 
 std::string cmakeString(const std::string& value) {
