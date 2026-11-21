@@ -3,6 +3,6 @@
 #include "command.h"
 
 class NewCommand : public Command {
-  public:
+public:
   int execute(const CLI& cli) override;
 };

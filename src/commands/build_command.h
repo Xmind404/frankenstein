@@ -1,11 +1,12 @@
 #pragma once
+
 #include "command.h"
 
 class BuildCommand : public Command {
-  public:
-  enum class Action { Build, Clean, Check, Test };
-  explicit BuildCommand(Action action = Action::Build) : action(action) {}
+public:
   int execute(const CLI& cli) override;
-  private:
-  Action action;
+
+  static std::string configurationFromCLI(const CLI& cli);
+  static std::string quoteShellArgument(const std::string& value);
+  static int runCMake(const std::string& arguments);
 };

@@ -5,7 +5,7 @@
 #include <vector>
 
 class CLI {
-  private:
+private:
   std::string command;
   std::vector<std::string> arguments;
   std::vector<std::string> flags;
@@ -15,11 +15,10 @@ class CLI {
   bool version_requested = false;
 
   void parseArguments(int argc, char* argv[]);
-
   bool validateCommand();
   bool validateArguments();
 
-  public:
+public:
   bool parse(int argc, char* argv[]);
 
   const std::string& getCommand() const;

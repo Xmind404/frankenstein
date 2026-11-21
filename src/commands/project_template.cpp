@@ -34,10 +34,11 @@ namespace {
       "\n"
       "set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n"
       "\n"
-      "include(${CMAKE_CURRENT_SOURCE_DIR}/frankenstein.sources.cmake OPTIONAL)\n"
-      "if(NOT DEFINED FRANKENSTEIN_SOURCES)\n"
-      "  set(FRANKENSTEIN_SOURCES \"" + source_file + "\")\n"
-      "endif()\n"
+      "# BEGIN FRANKENSTEIN SOURCES\n"
+      "set(FRANKENSTEIN_SOURCES\n"
+      "  \"" + source_file + "\"\n"
+      ")\n"
+      "# END FRANKENSTEIN SOURCES\n"
       "\n"
       "add_executable(${PROJECT_NAME} ${FRANKENSTEIN_SOURCES})";
   }
@@ -100,7 +101,7 @@ bool ProjectTemplate::create(
 
   const std::string source_file = is_c ? "src/main.c" : "src/main.cpp";
 
-  const std::array<File, 9> files = {{
+  const std::array<File, 8> files = {{
     {
       "CMakeLists.txt",
       createCMakeLists(
@@ -121,11 +122,11 @@ bool ProjectTemplate::create(
     {
       ".gitignore",
       "build/\n"
+      "publish/\n"
       "cmake-build-*/\n"
       "CMakeFiles/\n"
       "CMakeCache.txt\n"
       "compile_commands.json\n"
-      "frankenstein.sources.cmake\n"
       "*.o\n"
       "*.a\n"
       "*.so\n"
@@ -152,10 +153,6 @@ bool ProjectTemplate::create(
     {
       "tests/.gitkeep",
       ""
-    },
-    {
-      "frankenstein.sources.cmake",
-      "set(FRANKENSTEIN_SOURCES\n  \"" + source_file + "\"\n)"
     }
   }};
 

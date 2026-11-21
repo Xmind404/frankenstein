@@ -36,6 +36,8 @@ namespace ascii {
 
   void draw(const std::vector<std::string>& lines, Color color = Color::Default);
   std::string colorize(const std::string& content, Color color);
+  std::string boldize(const std::string& content);
+  std::string underline(const std::string& content);
   void drawLogo();
   void setColorEnabled(bool enabled);
 

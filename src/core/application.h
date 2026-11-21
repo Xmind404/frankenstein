@@ -4,11 +4,11 @@
 #include <string>
 
 class Application {
-  private:
+private:
   const datatypes::Version version;
   const std::string version_date;
 
-  public:
+public:
   Application(datatypes::Version version, std::string version_date);
 
   const datatypes::Version& getVersion() const;

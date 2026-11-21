@@ -5,12 +5,33 @@
 #include <cctype>
 
 namespace {
+
 std::string normalizeOption(std::string option) {
-  if (!option.starts_with("--")) return option;
+  if (!option.starts_with("--")) {
+    return option;
+  }
   std::transform(option.begin() + 2, option.end(), option.begin() + 2,
     [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return option;
 }
+
+bool isValuedFlag(const std::string& flag) {
+  return flag == "--template" ||
+         flag == "--jobs" ||
+         flag == "--target" ||
+         flag == "--color" ||
+         flag == "--rev" ||
+         flag == "--sha256";
+}
+
+bool isKnownFlag(const std::string& flag) {
+  return isValuedFlag(flag) ||
+         flag == "--release" ||
+         flag == "--verbose" ||
+         flag == "--offline" ||
+         flag == "--locked";
+}
+
 }
 
 void CLI::parseArguments(int argc, char* argv[]) {
@@ -29,34 +50,60 @@ void CLI::parseArguments(int argc, char* argv[]) {
   int start = 1;
   while (start < argc) {
     const std::string option = normalizeOption(argv[start]);
-    if (option == "--help" || option == "-h") { help_requested = true; ++start; continue; }
-    if (option == "--version" || option == "-V") { version_requested = true; ++start; continue; }
-    if (option == "--color") {
-      flags.push_back(option);
-      if (start + 1 < argc) flag_values[option] = argv[++start];
+    if (option == "--help" || option == "-h") {
+      help_requested = true;
       ++start;
       continue;
     }
-    if (option == "--verbose" || option == "--offline" || option == "--locked") { flags.push_back(option); ++start; continue; }
+    if (option == "--version" || option == "-V") {
+      version_requested = true;
+      ++start;
+      continue;
+    }
+    if (option == "--color") {
+      flags.push_back(option);
+      if (start + 1 < argc) {
+        flag_values[option] = argv[++start];
+      }
+      ++start;
+      continue;
+    }
+    if (option == "--verbose" || option == "--offline" || option == "--locked") {
+      flags.push_back(option);
+      ++start;
+      continue;
+    }
     break;
   }
+
   if (start == argc) {
-    if (!version_requested) help_requested = true;
+    if (!version_requested) {
+      help_requested = true;
+    }
     return;
   }
+
   if (std::string(argv[start]) == "help") {
     help_requested = true;
-    if (start + 1 < argc) arguments.push_back(argv[start + 1]);
+    if (start + 1 < argc) {
+      arguments.push_back(argv[start + 1]);
+    }
     return;
   }
+
   command = argv[start++];
-  bool pass_through = false;
+  bool passThrough = false;
 
-  for (int i = start; i < argc; i++) {
+  for (int i = start; i < argc; ++i) {
     std::string argument = normalizeOption(argv[i]);
-    if (pass_through) { arguments.push_back(argument); continue; }
-    if (argument == "--") { pass_through = true; continue; }
-
+    if (passThrough) {
+      arguments.push_back(argument);
+      continue;
+    }
+    if (argument == "--") {
+      passThrough = true;
+      continue;
+    }
     if (argument == "--help" || argument == "-h") {
       help_requested = true;
       continue;
@@ -68,13 +115,11 @@ void CLI::parseArguments(int argc, char* argv[]) {
 
     if (argument.starts_with("--")) {
       flags.push_back(argument);
-
-      if ((argument == "--template" || argument == "--branch" || argument == "--jobs" || argument == "--target" || argument == "--color" || argument == "--std" || argument == "--rev" || argument == "--sha256") && i + 1 < argc) {
-        std::string value = argv[i + 1];
-
+      if (isValuedFlag(argument) && i + 1 < argc) {
+        const std::string value = argv[i + 1];
         if (!value.starts_with("--")) {
           flag_values[argument] = value;
-          i++;
+          ++i;
         }
       }
     } else {
@@ -88,14 +133,9 @@ bool CLI::validateCommand() {
 }
 
 bool CLI::validateArguments() {
-  const std::vector<std::string> valued = {"--template", "--branch", "--jobs", "--target", "--color", "--std", "--rev", "--sha256"};
-  const std::vector<std::string> known = {
-    "--template", "--branch", "--jobs", "--target", "--color", "--std", "--rev", "--sha256",
-    "--release", "--debug", "--verbose", "--offline", "--locked"
-  };
   std::vector<std::string> seen;
   for (const std::string& flag : flags) {
-    if (std::find(known.begin(), known.end(), flag) == known.end()) {
+    if (!isKnownFlag(flag)) {
       Console::error("Unknown option: " + flag);
       return false;
     }
@@ -104,16 +144,28 @@ bool CLI::validateArguments() {
       return false;
     }
     seen.push_back(flag);
-    if (std::find(valued.begin(), valued.end(), flag) != valued.end() && getFlagValue(flag).empty()) {
+    if (isValuedFlag(flag) && getFlagValue(flag).empty()) {
       Console::error("Option requires a value: " + flag);
       return false;
     }
   }
-  if (hasFlag("--release") && hasFlag("--debug")) { Console::error("Choose either --release or --debug."); return false; }
-  if (hasFlag("--color") && getFlagValue("--color") != "auto" && getFlagValue("--color") != "always" && getFlagValue("--color") != "never") {
-    Console::error("--color must be auto, always, or never."); return false;
+
+  if (hasFlag("--color") &&
+      getFlagValue("--color") != "auto" &&
+      getFlagValue("--color") != "always" &&
+      getFlagValue("--color") != "never") {
+    Console::error("--color must be auto, always, or never.");
+    return false;
   }
-  if (hasFlag("--jobs")) for (char c : getFlagValue("--jobs")) if (c < '0' || c > '9') { Console::error("--jobs expects a positive integer."); return false; }
+
+  if (hasFlag("--jobs")) {
+    for (char c : getFlagValue("--jobs")) {
+      if (c < '0' || c > '9') {
+        Console::error("--jobs expects a positive integer.");
+        return false;
+      }
+    }
+  }
 
   return true;
 }
@@ -121,7 +173,6 @@ bool CLI::validateArguments() {
 bool CLI::parse(int argc, char* argv[]) {
   parseArguments(argc, argv);
   is_valid = help_requested || version_requested || (validateCommand() && validateArguments());
-
   return is_valid;
 }
 
@@ -138,24 +189,15 @@ const std::vector<std::string>& CLI::getFlags() const {
 }
 
 bool CLI::hasFlag(const std::string& flag) const {
-  for (const std::string& current_flag : flags) {
-    if (current_flag == flag) {
-      return true;
-    }
-  }
-
-  return false;
+  return std::find(flags.begin(), flags.end(), flag) != flags.end();
 }
 
 const std::string& CLI::getFlagValue(const std::string& flag) const {
   static const std::string empty;
-
   const auto iterator = flag_values.find(flag);
-
   if (iterator == flag_values.end()) {
     return empty;
   }
-
   return iterator->second;
 }
 
@@ -163,5 +205,10 @@ bool CLI::isValid() const {
   return is_valid;
 }
 
-bool CLI::wantsHelp() const { return help_requested; }
-bool CLI::wantsVersion() const { return version_requested; }
+bool CLI::wantsHelp() const {
+  return help_requested;
+}
+
+bool CLI::wantsVersion() const {
+  return version_requested;
+}

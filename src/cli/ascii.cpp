@@ -63,11 +63,18 @@ namespace ascii {
   }
 
   std::string colorize(const std::string& content, Color color) {
-    if (!color_enabled || color == Color::Default) {
-      return content;
-    }
-
+    if (!color_enabled || color == Color::Default) return content;
     return std::string(getColorCode(color)) + content + "\033[0m";
+  }
+
+  std::string boldize(const std::string& content) {
+    if (!color_enabled) return content;
+    return std::string("\033[1m") + content + "\033[22m";
+  }
+
+  std::string underline(const std::string& content) {
+    if (!color_enabled) return content;
+    return std::string("\033[4m") + content + "\033[24m";
   }
 
   void setColorEnabled(bool enabled) { color_enabled = enabled; }

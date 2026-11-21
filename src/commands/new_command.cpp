@@ -13,40 +13,26 @@
 
 namespace {
 
-  std::string availableDefaultProjectName() {
-    namespace fs = std::filesystem;
-
-    for (std::size_t suffix = 1;; ++suffix) {
-      const std::string name = suffix == 1
-        ? "my-project"
-        : "my-project-" + std::to_string(suffix);
-
-      std::error_code error;
-      const bool exists = fs::exists(name, error);
-
-      if (error || !exists) {
-        return name;
-      }
+std::string availableDefaultProjectName() {
+  namespace fs = std::filesystem;
+  for (std::size_t suffix = 1;; ++suffix) {
+    const std::string name = suffix == 1 ? "my-project" : "my-project-" + std::to_string(suffix);
+    std::error_code error;
+    const bool exists = fs::exists(name, error);
+    if (error || !exists) {
+      return name;
     }
   }
+}
 
 }
 
 int NewCommand::execute(const CLI& cli) {
   const auto& arguments = cli.getArguments();
 
-  const bool initialize_current_directory =
-    !arguments.empty() && arguments[0] == ".";
-
   std::string project_name;
-
-  if (initialize_current_directory) {
-    project_name = std::filesystem::current_path().filename().string();
-  } else if (arguments.empty()) {
-    project_name = prompt::input(
-      "Project name:",
-      availableDefaultProjectName()
-    );
+  if (arguments.empty()) {
+    project_name = prompt::input("Project name:", availableDefaultProjectName());
   } else {
     project_name = arguments[0];
   }
@@ -56,65 +42,45 @@ int NewCommand::execute(const CLI& cli) {
     return 1;
   }
 
-  const std::filesystem::path project_path =
-    initialize_current_directory
-      ? std::filesystem::current_path()
-      : std::filesystem::path{project_name};
+  const std::filesystem::path project_path{project_name};
 
-  if (!initialize_current_directory) {
-    std::error_code error;
-
-    if (std::filesystem::exists(project_path, error)) {
-      Console::error(
-        "Project already exists: " + project_name +
-        ". Choose another name or use 'frankenstein init' to initialize it."
-      );
-      return 1;
-    }
-
-    if (error) {
-      Console::error(
-        "Could not check project path: " + error.message()
-      );
-      return 1;
-    }
+  std::error_code error;
+  if (std::filesystem::exists(project_path, error)) {
+    Console::error(
+      "Project already exists: " + project_name +
+      ". Choose another name or use 'frankenstein init' inside that directory."
+    );
+    return 1;
+  }
+  if (error) {
+    Console::error("Could not check project path: " + error.message());
+    return 1;
   }
 
   std::optional<configuration::ProjectConfiguration> project_configuration;
-
   if (cli.hasFlag("--template")) {
     project_configuration = configuration::ProjectConfiguration::fromTemplate(
       cli.getFlagValue("--template")
     );
-
     if (!project_configuration.has_value()) {
-      Console::error(
-        "Unknown template: " + cli.getFlagValue("--template")
-      );
-
+      Console::error("Unknown template: " + cli.getFlagValue("--template"));
       return 1;
     }
   } else {
-    project_configuration =
-      configuration::ProjectConfigurationPrompt::select();
+    project_configuration = configuration::ProjectConfigurationPrompt::select();
   }
 
   ProjectInitializer project_initializer;
-
-  const auto mode = initialize_current_directory
-    ? ProjectInitializer::Mode::CurrentDirectory
-    : ProjectInitializer::Mode::NewProject;
-
   if (!project_initializer.initialize(
     project_path,
     *project_configuration,
-    mode
+    ProjectInitializer::Mode::NewProject
   )) {
     Console::error("Could not initialize project: " + project_name);
     return 1;
   }
 
   Console::success("Project created successfully: " + project_name);
-
+  Console::print("Next: cd " + project_name + " && frankenstein sync && frankenstein build");
   return 0;
 }
