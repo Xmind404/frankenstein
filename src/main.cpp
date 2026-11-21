@@ -5,7 +5,7 @@
 #define FRANKENSTEIN_VERSION_MAJOR 1
 #define FRANKENSTEIN_VERSION_MINOR 1
 #define FRANKENSTEIN_VERSION_PATCH 1
-#define FRANKENSTEIN_VERSION_DATE "unknown"
+#define FRANKENSTEIN_VERSION_DATE "2026-11-21 01:03"
 #endif
 
 int main(int argc, char* argv[]) {
