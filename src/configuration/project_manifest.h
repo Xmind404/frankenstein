@@ -19,10 +19,19 @@ struct Manifest {
   std::string standard;
   std::vector<std::string> sources;
   std::vector<Dependency> dependencies;
+  std::vector<std::string> linkLibraries;
+  std::vector<std::string> windowsLinkLibraries;
+  std::vector<std::string> linuxLinkLibraries;
+  std::vector<std::string> macosLinkLibraries;
 };
 
 Manifest readManifest(const std::filesystem::path& path);
 bool writeManifest(const std::filesystem::path& path, const Manifest& manifest);
 bool manifestExists(const std::filesystem::path& path);
+
+std::vector<std::string> resolvedLinkLibraries(const Manifest& manifest);
+std::vector<std::string> resolvedLinkLibraries(const Manifest& manifest,
+                                               const std::string& platform);
+std::string currentPlatformName();
 
 }

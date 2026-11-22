@@ -64,8 +64,6 @@ std::string jsonString(const std::string& object, const std::string& key) {
       case 'r': result += '\r'; break;
       case 't': result += '\t'; break;
       case 'u':
-        // Keep unsupported Unicode escape sequences visible rather than
-        // accidentally consuming arbitrary bytes from the JSON document.
         if (position + 4 <= object.size()) {
           result += "\\u";
           result.append(object, position, 4);
@@ -158,6 +156,12 @@ struct Repository {
   long long watchers = 0;
 };
 
+std::string repositoryUrlFromFullName(const std::string& fullName) {
+  if (fullName.empty()) return {};
+  if (fullName.find('/') == std::string::npos) return {};
+  return "https://github.com/" + fullName;
+}
+
 void printRepository(const Repository& repository, std::size_t index) {
   const std::string heading = ascii::boldize(ascii::colorize(repository.fullName, ascii::Color::White));
   Console::print(std::to_string(index) + ". " + heading);
@@ -211,11 +215,11 @@ int SearchCommand::execute(const CLI& cli) {
     Repository repository;
     repository.fullName = jsonString(object, "full_name");
     repository.branch = jsonString(object, "default_branch");
-    repository.url = jsonString(object, "html_url");
     repository.description = jsonString(object, "description");
     repository.stars = jsonNumber(object, "stargazers_count");
     repository.forks = jsonNumber(object, "forks_count");
     repository.watchers = jsonNumber(object, "watchers_count");
+    repository.url = repositoryUrlFromFullName(repository.fullName);
     if (!repository.fullName.empty() && !repository.url.empty()) repositories.push_back(std::move(repository));
   }
 

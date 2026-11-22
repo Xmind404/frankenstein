@@ -63,6 +63,13 @@ bool validTargetName(const std::string& target) {
   return false;
 }
 
+bool validLinkLibraryName(const std::string& name) {
+  if (name.empty()) return false;
+  return std::all_of(name.begin(), name.end(), [](unsigned char c) {
+    return std::isalnum(c) || c == '_' || c == '.' || c == '+' || c == '-' || c == ':' || c == '/';
+  });
+}
+
 bool validBranchName(const std::string& branch) {
   if (branch.empty() || branch.front() == '/' || branch.back() == '/' ||
       branch.find("//") != std::string::npos || branch.find("..") != std::string::npos ||
@@ -172,6 +179,22 @@ bool validateManifest(const fs::path& manifestPath,
       return false;
     }
   }
+
+  auto validateLinkList = [&](const std::vector<std::string>& list,
+                              const std::string& sectionName) -> bool {
+    for (const std::string& library : list) {
+      if (!validLinkLibraryName(library)) {
+        errorMessage = "Invalid library name in [" + sectionName + "]: '" + library + "'.";
+        return false;
+      }
+    }
+    return true;
+  };
+  if (!validateLinkList(manifest.linkLibraries, "linking")) return false;
+  if (!validateLinkList(manifest.windowsLinkLibraries, "linking.windows")) return false;
+  if (!validateLinkList(manifest.linuxLinkLibraries, "linking.linux")) return false;
+  if (!validateLinkList(manifest.macosLinkLibraries, "linking.macos")) return false;
+
   return true;
 }
 
@@ -224,7 +247,7 @@ bool ensureDependencyInstalled(const fs::path& root,
 
     if (hasCmake && markerMatchesRepository && markerValid && lockAndMarkerMatch) {
       resultingLock = {dependency.repository, dependency.branch, marker.commit, marker.sha256};
-      Console::success("Dependency is up to date: " + dependency.repository + " (" + marker.commit.substr(0, 8) + ")");
+      Console::success("Dependency is up to date: " + dependency.repository + " (" + marker.commit.substr(0, 8) +")");
       return true;
     }
   }
@@ -354,6 +377,10 @@ int SyncCommand::execute(const CLI& cli) {
   }
   if (!configuration::synchronizeDependencies(root, manifest.dependencies)) {
     Console::error("Could not synchronize dependency targets in CMakeLists.txt.");
+    return 1;
+  }
+  if (!configuration::synchronizeLinking(root, manifest, message)) {
+    Console::error(message.empty() ? "Could not synchronize linking configuration." : message);
     return 1;
   }
 

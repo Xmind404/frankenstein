@@ -41,8 +41,6 @@ bool writeFileAtomic(const fs::path& path, const std::string& content) {
   fs::rename(temporary, path, error);
   if (!error) return true;
 
-  // Windows does not replace an existing destination with rename(). Keep a
-  // recoverable backup rather than deleting the original before replacement.
   error.clear();
   if (!fs::exists(path, error) || error) {
     fs::remove(temporary, error);
@@ -148,6 +146,57 @@ void removeDependencyBlocks(std::string& content) {
   }
 }
 
+void removeLinkingBlocks(std::string& content) {
+  const std::string beginMarker = "# BEGIN FRANKENSTEIN LINKING";
+  const std::string endMarker = "# END FRANKENSTEIN LINKING";
+  while (true) {
+    const std::size_t begin = content.find(beginMarker);
+    if (begin == std::string::npos) return;
+    const std::size_t end = content.find(endMarker, begin);
+    if (end == std::string::npos) return;
+    std::size_t lineEnd = content.find('\n', end);
+    if (lineEnd == std::string::npos) lineEnd = content.size();
+    content.erase(begin, lineEnd - begin + 1);
+  }
+}
+
+std::string renderLinkLibrariesCall(const std::vector<std::string>& libraries) {
+  std::ostringstream block;
+  block << "target_link_libraries(${PROJECT_NAME} PRIVATE";
+  for (const std::string& library : libraries) {
+    block << "\n  " << library;
+  }
+  block << "\n)";
+  return block.str();
+}
+
+std::string renderLinkingBlock(const Manifest& manifest) {
+  std::ostringstream block;
+  block << "# BEGIN FRANKENSTEIN LINKING\n";
+
+  if (!manifest.linkLibraries.empty()) {
+    block << renderLinkLibrariesCall(manifest.linkLibraries) << "\n";
+  }
+  if (!manifest.windowsLinkLibraries.empty()) {
+    block << "if(WIN32)\n";
+    block << "  " << renderLinkLibrariesCall(manifest.windowsLinkLibraries) << "\n";
+    block << "endif()\n";
+  }
+  if (!manifest.linuxLinkLibraries.empty()) {
+    block << "if(UNIX AND NOT APPLE)\n";
+    block << "  " << renderLinkLibrariesCall(manifest.linuxLinkLibraries) << "\n";
+    block << "endif()\n";
+  }
+  if (!manifest.macosLinkLibraries.empty()) {
+    block << "if(APPLE)\n";
+    block << "  " << renderLinkLibrariesCall(manifest.macosLinkLibraries) << "\n";
+    block << "endif()\n";
+  }
+
+  block << "# END FRANKENSTEIN LINKING";
+  return block.str();
+}
+
 enum class ProjectLanguage { C, Cpp };
 
 bool readManifestStandard(const fs::path& manifest, std::string& standard) {
@@ -211,7 +260,6 @@ bool detectProjectLanguage(const std::string& content, const std::string& standa
       if (token == "CXX") hasCpp = true;
     }
   } else {
-    // CMake's project(name) default enables both C and C++.
     hasC = true;
     hasCpp = true;
   }
@@ -440,8 +488,6 @@ bool synchronizeDependencies(const fs::path& root, const std::vector<Dependency>
   std::ifstream input(cmakePath);
   if (!input) return false;
 
-  // Validate every dependency before touching CMakeLists.txt. This prevents a
-  // partially regenerated file when one dependency was removed manually.
   for (const Dependency& dependency : dependencies) {
     if (!validCmakeTarget(dependency.target)) return false;
     if (dependency.target.empty()) continue;
@@ -470,6 +516,45 @@ bool synchronizeDependencies(const fs::path& root, const std::vector<Dependency>
   content += blocks.str();
   if (!content.empty() && content.back() == '\n') content.pop_back();
   return writeFileAtomic(cmakePath, content);
+}
+
+bool synchronizeLinking(const fs::path& root,
+                        const Manifest& manifest,
+                        std::string& message) {
+  const fs::path cmakePath = root / "CMakeLists.txt";
+  std::ifstream input(cmakePath);
+  if (!input) {
+    message = "Could not open CMakeLists.txt.";
+    return false;
+  }
+  std::string content{
+    std::istreambuf_iterator<char>(input),
+    std::istreambuf_iterator<char>{}
+  };
+  input.close();
+
+  removeLinkingBlocks(content);
+
+  const bool hasAnyLinking =
+      !manifest.linkLibraries.empty() ||
+      !manifest.windowsLinkLibraries.empty() ||
+      !manifest.linuxLinkLibraries.empty() ||
+      !manifest.macosLinkLibraries.empty();
+
+  if (hasAnyLinking) {
+    if (!content.empty() && content.back() != '\n') content += '\n';
+    content += "\n" + renderLinkingBlock(manifest) + "\n";
+    if (!content.empty() && content.back() == '\n') content.pop_back();
+  } else if (!content.empty() && content.back() == '\n') {
+    content.pop_back();
+  }
+
+  if (!writeFileAtomic(cmakePath, content)) {
+    message = "Could not safely update CMakeLists.txt (linking block).";
+    return false;
+  }
+  message.clear();
+  return true;
 }
 
 }
