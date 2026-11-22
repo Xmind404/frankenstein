@@ -142,6 +142,6 @@ This makes builds reproducible and lets `frankenstein sync` re-download the exac
 
 ## Releases
 
-Pushing a version tag such as `v1.1.2` starts `.github/workflows/release.yml`. GitHub Actions builds Linux, macOS, and Windows archives, calculates `SHA256SUMS`, and publishes the assets as a GitHub Release. The install scripts download those release assets. A tag by itself is not enough: the workflow must finish and publish the Release before the `releases/latest/download` installer URL can work.
+Pushing a version tag such as `v2.0.0` starts `.github/workflows/release.yml`. GitHub Actions builds Linux, macOS, and Windows archives, calculates `SHA256SUMS`, and publishes the assets as a GitHub Release. The install scripts download those release assets. A tag by itself is not enough: the workflow must finish and publish the Release before the `releases/latest/download` installer URL can work.
 
-The Linux archive is built on Ubuntu 22.04 and targets compatible x86-64 and ARM64 Linux systems. CPR and its bundled curl are linked statically so the release archive does not require separate CPR or curl library files. Release builds require GitHub Actions network access to fetch the CPR curl dependency. The next release tag is `v1.1.2`.
+The Linux archive is built on Ubuntu 22.04 and targets compatible x86-64 and ARM64 Linux systems. CPR and its bundled curl are linked statically so the release archive does not require separate CPR or curl library files. Release builds require GitHub Actions network access to fetch the CPR curl dependency. The next release tag is `v2.0.0`.
