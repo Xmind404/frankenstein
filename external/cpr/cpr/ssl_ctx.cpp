@@ -28,7 +28,7 @@
 #include <openssl/ossl_typ.h>
 #endif
 
-// openssl/pemerr.h was added in 1.1.1a, but not in BoringSSL
+// openssl/pemerr.h was added in 1.1.2a, but not in BoringSSL
 // Ref https://github.com/libcpr/cpr/issues/333#issuecomment-2425104338
 #if OPENSSL_VERSION_NUMBER >= 0x1010101fL && !defined(OPENSSL_IS_BORINGSSL)
 #include <openssl/pemerr.h>
